@@ -71,7 +71,7 @@ void Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_
   for (i = sublen, j = 0; j < len - 1; ++i, ++j) h[i] += cSfS[j];
 
   // h may crash! (worst-case middle terms: its scale follows a recursive relation)
-  if ((len == LEN2) || (len == LEN4)) for (i = 0; i < (len << 1) - 1; ++i) {
+  if (len == LEN2) for (i = 0; i < (len << 1) - 1; ++i) {
   // if (((len == LEN2) || (len == LEN4)) || (len == LEN6)) for (i = 0; i < (len << 1) - 1; ++i) {
     a = h[i];
     a -= 4591 * ((228 * a) >> 20);
