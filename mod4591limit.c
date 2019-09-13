@@ -20,8 +20,8 @@ int main() {
   int32_t maxX = 0, minX = 0;
   int32_t maxY = 0, minY = 0;
 
-  lwb = -47076 * 2295;
-  upb = 47076 * 2295;
+  lwb = -18372 * 2295;
+  upb = 18372 * 2295;
   printf("a helpful tool to label the scales in Toom4/Toom-k interpolation\n\n");
   printf("test from %d to %d\n", lwb, upb);
   for (numIn = lwb; numIn <= upb; ++numIn) {
