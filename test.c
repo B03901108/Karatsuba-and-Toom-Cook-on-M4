@@ -106,7 +106,7 @@ for (counter = 0; counter < 1000; ++counter) {
   printf("schoolbook: %ld, ", end - begin);
 
   begin = clock();
-  Toom3_mult(h2, c, f);
+  Toom4_mult(h2, c, f);
   for (i = 1520; i >= 761; --i) {
     h2[i - 761] += h2[i];
     h2[i - 760] += h2[i];
@@ -118,7 +118,7 @@ for (counter = 0; counter < 1000; ++counter) {
     h2[i] = a;
   }
   end = clock();
-  printf("Toom-3: %ld, ", end - begin);
+  printf("Toom-4: %ld, ", end - begin);
 
   begin = clock();
   mock_Karatsuba_mult(h3, c, f, 768, 1);

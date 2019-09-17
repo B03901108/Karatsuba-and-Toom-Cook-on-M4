@@ -2,10 +2,10 @@
 #define schoolbook_h
 
 #include <stdint.h>
-#define UNITLEN 32
-#define LEN2 128
-/* #define UNITLEN 24
-#define LEN2 96 */
+/* #define UNITLEN 32
+#define LEN2 128 */
+#define UNITLEN 24
+#define LEN2 96
 /* #define UNITLEN 12
 #define LEN2 48
 #define LEN4 192

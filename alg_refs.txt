@@ -1,0 +1,15 @@
+
+1. Toom-Cook
+What about Toom-Cook Matrices Optimality? (Marco Bodrato, Alberto Zanoni)
+-> optimal sequences of elementary row operations for Toom-3 & Toom-4
+
+Integer and Polynomial Multiplication: towards optimal Toom-Cook matrices (Marco Bodrato, Alberto Zanoni)
+-> a general way to find the optimal sequences for Toom-k & Toom-k.5
+
+High Degree Toom'n'half for Balanced and Unbalanced Multiplication (Marco Bodrato)
+-> new and highly efficient  Toom-6.5 & Toom-8.5 (implemented in GMP 5.0)
+
+Notes on Low Degree Toom-Cook Multiplication with Small Characteristic (Marco Bodrato)
+-> Toom-k ft. F_p[x] with small k and p
+
+2. Karatsuba

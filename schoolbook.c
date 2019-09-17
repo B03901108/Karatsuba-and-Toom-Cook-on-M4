@@ -1,5 +1,10 @@
 #include "schoolbook.h"
 
+// TODO: (a_0 + a_1 * 2^16) mod q; montgomery reduction applied to a_1 * 2^16 mod q; smlaXX to accelerate Mont.
+// TODO: declare (((((768 * (3/2)) * (3/2)) * (3/2)) * (3/2) * (3/2)) for iterative Karatsuba
+// TODO: Toom6; NTT (x2 or x3 to mod 4591 using CRT); Schönhage-Strassen from x86 code;
+// TODO: VCPA on mutli-samples if memeory access only at the end of e_i calculation; reproduction with original methods;
+
 // h[2 * UNITLEN - 1], c[UNITLEN], f[UNITLEN]
 void schoolbook_mult(int16_t *h, const int16_t *c, const int16_t *f) {
   int i, j;
@@ -42,12 +47,12 @@ void Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_
       a -= 4591 * ((58470 * a + 134217728) >> 28);
       c[i] = a;
     }
-    for (i = 0; i < len; ++i) {
+    /* for (i = 0; i < len; ++i) {
       a = f[i];
       a -= 4591 * ((228 * a) >> 20);
       a -= 4591 * ((58470 * a + 134217728) >> 28);
       f[i] = a;
-    }
+    } */
     inputScale = 1;
   }
 
@@ -91,7 +96,7 @@ void Toom3_mult(int16_t *h, int16_t *c, int16_t *f) {
   int16_t Cat1[256], Cat_1[256], Cat10[256];
   int16_t Fat1[256], Fat_1[256], Fat10[256];
   int16_t * h2 = h + 512, * h4 = h2 + 512; 
-  int16_t h1[511], h3[511], h5[511];
+  int16_t h1[511], h3[511];
 
   for (i = 0; i < 256; ++i){
     a = c[i] + c2[i];
@@ -224,10 +229,10 @@ void Toom4_mult(int16_t *h, int16_t *c, int16_t *f) {
     b = f1[i] + f3[i];
     a = a + b; b = a - (b << 1);
 
-    a -= 4591 * ((228 * a) >> 20);
+    /* a -= 4591 * ((228 * a) >> 20);
     a -= 4591 * ((58470 * a + 134217728) >> 28);
     b -= 4591 * ((228 * b) >> 20);
-    b -= 4591 * ((58470 * b + 134217728) >> 28);
+    b -= 4591 * ((58470 * b + 134217728) >> 28); */
     Fat1[i] = a; Fat_1[i] = b;
   }
   for (i = 0; i < 192; ++i){
@@ -235,17 +240,17 @@ void Toom4_mult(int16_t *h, int16_t *c, int16_t *f) {
     b = (f1[i] << 1) + (f3[i] << 3);
     a = a + b; b = a - (b << 1);
 
-    a -= 4591 * ((228 * a) >> 20);
+    /* a -= 4591 * ((228 * a) >> 20);
     a -= 4591 * ((58470 * a + 134217728) >> 28);
     b -= 4591 * ((228 * b) >> 20);
-    b -= 4591 * ((58470 * b + 134217728) >> 28);
+    b -= 4591 * ((58470 * b + 134217728) >> 28); */
     Fat10[i] = a; Fat_10[i] = b;
   }
   for (i = 0; i < 192; ++i){
     a = (f[i] << 3) + (f1[i] << 2) + (f2[i] << 1) + f3[i];
     
-    a -= 4591 * ((228 * a) >> 20);
-    a -= 4591 * ((58470 * a + 134217728) >> 28);
+    /* a -= 4591 * ((228 * a) >> 20);
+    a -= 4591 * ((58470 * a + 134217728) >> 28); */
     Fat01[i] = a;
   }
 
