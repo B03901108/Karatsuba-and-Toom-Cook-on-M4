@@ -90,6 +90,24 @@ for (counter = 0; counter < 1000; ++counter) {
 //  for (i = 0; i < 760; ++i) printf("%d, ", f[i]);
 //  printf("%d\n\n", f[760]);
 
+  /* for (i = 0; i < 191; ++i) printf("%d, ", c[i]);
+  printf("%d\n\n", c[191]);
+  for (i = 0; i < 191; ++i) printf("%d, ", f[i]);
+  printf("%d\n\n", f[191]);
+  
+  mock_mult(h1, c, f, 192);
+  recur_Karatsuba_mult(h2, c, f, 192, 1);
+  iter_Karatsuba_mult(h3, c, f);
+  printf("schoolbook rslt\n");
+  for (i = 0; i < 383; ++i) printf("%d, ", h1[i]);
+  printf("%d\n\n", h1[383]);
+  printf("iter Karatsuba rslt\n");
+  for (i = 0; i < 383; ++i) printf("%d, ", h2[i]);
+  printf("%d\n\n", h2[383]);
+  printf("recur Karatsuba rslt\n");
+  for (i = 0; i < 383; ++i) printf("%d, ", h3[i]);
+  printf("%d\n\n", h3[383]); */
+
   begin = clock();
   mock_mult(h1, c, f, 768);
   for (i = 1520; i >= 761; --i) {

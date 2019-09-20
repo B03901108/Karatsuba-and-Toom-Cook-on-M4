@@ -27,11 +27,53 @@ void schoolbook_mult(int16_t *h, const int16_t *c, const int16_t *f) {
   }
 }
 
+// 192x192 -> 3-layer Karatsuba
+// TODO: generalization
+void iter_Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f) {
+  int i, j1, j2, k, auxlen;
+  int32_t a;
+  // int8_t scaleIn[648]; // TODO: dynamic checking
+  int16_t c_ext[648], f_ext[648], h_ext[1296];
+  int16_t * cf, * cSfS, * bndry;
+  int16_t len = 192, offset = 192, offsetArr[3] = { 864, 576, 384 };
+
+  for (i = 0; i < 192; ++i) { c_ext[i] = c[i]; f_ext[i] = f[i]; }
+  for (i = 0; i < 3; ++i, len = auxlen, offset += (offset >> 1)) {
+    auxlen = len >> 1;
+    for (j1 = auxlen, j2 = 0, k = offset; j1 < offset; ++j1, ++j2, ++k) {
+      if (j2 == auxlen) { j1 += auxlen; j2 = 0; }
+      // TODO: input modular arithmetic: dynamic checking? pre-computating?
+      c_ext[k] = c_ext[j1] + c_ext[j1 - auxlen];
+      f_ext[k] = f_ext[j1] + f_ext[j1 - auxlen];
+    }
+  }
+
+  for (i = 0; i < 648; i += 24) schoolbook_mult(h_ext + (i << 1), c_ext + i, f_ext + i);
+
+  for (i = 0; i < 3; ++i, len = auxlen) {
+    bndry = h_ext + offsetArr[i];
+    auxlen = len << 1;
+    for (cf = h_ext, cSfS = bndry; cf < bndry; cf += (auxlen << 1), cSfS += auxlen) {
+      for (j1 = len, j2 = auxlen; j1 < auxlen - 1; ++j1, ++j2) cf[j1] -= cf[j2];
+      for (; j2 < (auxlen << 1) - 1; ++j1, ++j2) cf[j1] = -cf[j2];
+      for (j1 = auxlen + len - 2, j2 = j1 - len; j2 >= 0; --j1, --j2) cf[j1] -= cf[j2];
+      for (j1 = len, j2 = 0; j2 < auxlen - 1; ++j1, ++j2) cf[j1] += cSfS[j2];
+      if (i == 1) for (j1 = 0; j1 < (auxlen << 1) - 1; ++j1) {
+        a = cf[j1];
+        a -= 4591 * ((228 * a) >> 20);
+        a -= 4591 * ((58470 * a + 134217728) >> 28);
+        cf[j1] = a;
+      }
+    }
+  }
+  for (i = 0; i < 383; ++i) h[i] = h_ext[i];
+}
+
 // h[2 * len - 1], c[len], f[len], inputScale: |worst-case c_i / 2295|
 // TODO: one loop for two array additions or two indep. loops
 // TODO: save cS & fS by reusing c & f, cSfS by c0/1f0/1, ...
 // TODO: recursive (len > UNITLEN) or verbose (sublen > UNITLEN)
-void Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_t inputScale) {
+void recur_Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_t inputScale) {
   int i, j;
   int32_t a; // for modq_freeze()
   int16_t sublen = len >> 1;
@@ -62,9 +104,9 @@ void Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_
   }
 
   if (sublen > UNITLEN) {
-    Karatsuba_mult(h, c, f, sublen, inputScale);
-    Karatsuba_mult(h + len, c + sublen, f + sublen, sublen, inputScale);
-    Karatsuba_mult(cSfS, cS, fS, sublen, inputScale << 1);
+    recur_Karatsuba_mult(h, c, f, sublen, inputScale);
+    recur_Karatsuba_mult(h + len, c + sublen, f + sublen, sublen, inputScale);
+    recur_Karatsuba_mult(cSfS, cS, fS, sublen, inputScale << 1);
   } else {
     schoolbook_mult(h, c, f);
     schoolbook_mult(h + len, c + sublen, f + sublen);
@@ -136,11 +178,11 @@ void Toom3_mult(int16_t *h, int16_t *c, int16_t *f) {
     Fat10[i] = a;
   }
 
-  Karatsuba_mult(h, c, f, 256, 1);
-  Karatsuba_mult(h1, Cat_1, Fat_1, 256, 1);
-  Karatsuba_mult(h2, Cat1, Fat1, 256, 1);
-  Karatsuba_mult(h3, Cat10, Fat10, 256, 1);
-  Karatsuba_mult(h4, c2, f2, 256, 1);
+  recur_Karatsuba_mult(h, c, f, 256, 1);
+  recur_Karatsuba_mult(h1, Cat_1, Fat_1, 256, 1);
+  recur_Karatsuba_mult(h2, Cat1, Fat1, 256, 1);
+  recur_Karatsuba_mult(h3, Cat10, Fat10, 256, 1);
+  recur_Karatsuba_mult(h4, c2, f2, 256, 1);
 
   for (i = 0; i < 511; ++i){
     a = h[i]; b = h1[i]; d = h2[i]; e = h3[i]; g = h4[i];
@@ -254,13 +296,13 @@ void Toom4_mult(int16_t *h, int16_t *c, int16_t *f) {
     Fat01[i] = a;
   }
 
-  Karatsuba_mult(h, c, f, 192, 1);
-  Karatsuba_mult(h1, Cat01, Fat01, 192, 1);
-  Karatsuba_mult(h2, Cat1, Fat1, 192, 1);
-  Karatsuba_mult(h3, Cat_1, Fat_1, 192, 1);
-  Karatsuba_mult(h4, Cat10, Fat10, 192, 1);
-  Karatsuba_mult(h5, Cat_10, Fat_10, 192, 1);
-  Karatsuba_mult(h6, c3, f3, 192, 1);
+  iter_Karatsuba_mult(h, c, f);
+  iter_Karatsuba_mult(h1, Cat01, Fat01);
+  iter_Karatsuba_mult(h2, Cat1, Fat1);
+  iter_Karatsuba_mult(h3, Cat_1, Fat_1);
+  iter_Karatsuba_mult(h4, Cat10, Fat10);
+  iter_Karatsuba_mult(h5, Cat_10, Fat_10);
+  iter_Karatsuba_mult(h6, c3, f3);
 
   for (i = 0; i < 383; ++i){
     a = h[i]; b = h1[i]; d = h2[i]; e = h3[i]; g = h4[i]; k = h5[i]; l = h6[i]; 

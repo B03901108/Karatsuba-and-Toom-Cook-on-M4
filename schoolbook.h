@@ -23,7 +23,8 @@ static inline int16_t modq_freeze(int32_t a) {
 }
 
 void schoolbook_mult(int16_t *, const int16_t *, const int16_t *);
-void Karatsuba_mult(int16_t *, int16_t *, int16_t *, const int16_t, int8_t);
+void iter_Karatsuba_mult(int16_t *, int16_t *, int16_t *);
+void recur_Karatsuba_mult(int16_t *, int16_t *, int16_t *, const int16_t, int8_t);
 void Toom3_mult(int16_t *, int16_t *, int16_t *);
 void Toom4_mult(int16_t *, int16_t *, int16_t *);
 
