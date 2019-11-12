@@ -97,6 +97,7 @@ void smlal_mult(int16_t *h, const int16_t *c, const int16_t *f, const int16_t le
         product7 += ((int32_t)(upper3 - sxt6(upper3))) >> 6;
 
         upper1 = 0, lower1 = 0, upper2 = 0, lower2 = 0, upper3 = 0, lower3 = 0;
+        k = 0;
       } else if (k == 28) {
         product_tmp = sxt19(lower2);
         product3 += product_tmp;
@@ -174,6 +175,7 @@ void smlal_mult_64(int32_t *h, const int16_t *c, const int16_t *f) {
         product7 += ((int32_t)(upper3 - sxt6(upper3))) >> 6;
 
         upper1 = 0, lower1 = 0, upper2 = 0, lower2 = 0, upper3 = 0, lower3 = 0;
+        k = 0;
       } else if (k == 3) {
         product_tmp = sxt19(lower2);
         product3 += product_tmp;
@@ -191,8 +193,8 @@ void smlal_mult_64(int32_t *h, const int16_t *c, const int16_t *f) {
     product_tmp = sxt19(lower2);
     product3 += product_tmp;
     product4 += sxt19((upper2 << 13) + (((uint32_t) lower2) >> 19) - (product_tmp >> 19));
-    h[i << 1] = barrett_32(product1); h[(i << 1) + 1] = barrett_32(product2);
-    h[(i << 1) + 2] = barrett_32(product3); h[(i << 1) + 3] = barrett_32(product4);
+    h[i << 1] = product1; h[(i << 1) + 1] = product2;
+    h[(i << 1) + 2] = product3; h[(i << 1) + 3] = product4;
 
     product_tmp = sxt19(lower3);
     product1 = product5 + product_tmp;
@@ -201,6 +203,6 @@ void smlal_mult_64(int32_t *h, const int16_t *c, const int16_t *f) {
     product3 = product7 + (((int32_t)(upper3 - sxt6(upper3))) >> 6);
   }
 
-  h[i << 1] = barrett_32(product1); h[(i << 1) + 1] = barrett_32(product2);
-  h[(i << 1) + 2] = barrett_32(product3); h[(i << 1) + 3] = 0;
+  h[i << 1] = product1; h[(i << 1) + 1] = product2;
+  h[(i << 1) + 2] = product3; h[(i << 1) + 3] = 0;
 }
