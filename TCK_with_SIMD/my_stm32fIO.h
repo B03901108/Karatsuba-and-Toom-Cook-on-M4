@@ -13,5 +13,6 @@ void console_puts(char *s);
 int console_gets(char *s, int len);
 
 void console_putint(int64_t numIn);
+void console_puthex(uint64_t bitstr);
 
 #endif

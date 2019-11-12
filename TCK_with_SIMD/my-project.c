@@ -64,7 +64,6 @@ static void mock_mult(int16_t *h, const int16_t *c, const int16_t *f, const int1
       a = __SMLADX(*(uint32_t *)(c + j), *(uint32_t *)(f + i - j - 1), a);
     h[i] = barrett_32(a);
   }
-
   for (; i < len * 2 - 1; ++i) {
   	j = 1 - (i & 1);
     a = (j) ? (c[i - len + 1] * f[len - 1]) : (0);
@@ -114,10 +113,40 @@ static void mock_Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_
     (*(uint32_t *)(h + i)) = __SSUB16((*(uint32_t *)(cSfS + j)), (*(uint32_t *)(h + i)));
 
   if ((len == 96) || (len == 384)) {
-    for (i = 0; i < (len << 1) - 2; i += 2)
+    for (i = 0; i < len << 1; i += 2)
   	  *(uint32_t *)(h + i) = barrett_16x2(*(uint32_t *)(h + i));
-  	h[i] = barrett_32(h[i]);
   }
+}
+
+// $len assumed even
+static void ref_smlal_mult(int16_t * h, int16_t * c, int16_t * f, const int16_t len) {
+	int i, j, j_begin, j_end;
+	uint32_t op1, op2;
+	int32_t a1, a2;
+	uint32_t upper = 0, lower = 0;
+
+	for (i = 0; i < len + len - 2; i += 2) {
+		if (i < len) { j_begin = 0; j_end = i + 1; }
+		else { j_begin = i - len + 2; j_end = len; }
+
+		for (j = j_begin; j < j_end; j += 2) {
+			op1 = (c[j + 1] << 19) + c[j];
+			op2 = (f[i - j + 1] << 19) + f[i - j];
+			__asm__ volatile ("smlal %0, %1, %2, %3"
+				: "=r" (lower), "=r" (upper)
+				: "r" (op1), "r" (op2) , "0" (lower), "1" (upper)
+				: "cc");
+		}
+
+		a1 = sxt19(lower);
+		a2 = sxt19((upper << 13) + (((uint32_t) lower) >> 19) - (a1 >> 19));
+		h[i] = barrett_32(a1);
+		h[i + 1] = barrett_32(a2);
+		lower = ((int32_t)(upper - sxt6(upper))) >> 6;
+		upper = ((int32_t)lower) >> 19;
+	}
+
+	h[i] = barrett_32(lower); h[i + 1] = 0;
 }
 
 int main(void) {
@@ -130,40 +159,29 @@ int main(void) {
 	int i, j;
 	int32_t a, x, y, z, counter;
 	uint64_t t0, t1;
-	int16_t h1[1536], h2[1536], h3[1536];
+	int16_t h1[1536], h2[1536], h3[1536], h4[1536], h5[1536];
 	int16_t c[768] = { 0 };
 	int16_t f[768] = { 0 };
+	int32_t h32[1536];
 
 	console_puts("\nStart of Testing\r\n\n");
 
 	// srand(hal_get_time());
-	srand(53589793); // 31415926
-	for (counter = 0; counter < 100; ++counter) {
+	srand(23846264); // 31415926 // 53589793
+	for (counter = 0; counter < 1000; ++counter) {
 		for (i = 0; i < 761; ++i) c[i] = (rand() % 1531) * 3 - 2295;
 		for (i = 0; i < 761; ++i) f[i] = (rand() % 3) - 1;
-		for (i = 0; i < 1536; ++i) h1[i] = h2[i] = h3[i] = 0;
+		for (i = 0; i < 1536; ++i) h1[i] = h2[i] = h3[i] = h4[i] = h5[i] = h32[i] = 0;
 
-		t0 = hal_get_time();
-		mock_mult(h1, c, f, 761);
-		y = h1[761];
-		a = h1[0] + y;
-		h1[0] = barrett_32(a);
-		a = h1[760] + h1[1520];
-		h1[760] = barrett_32(a);
-		for (i = 1; i < 760; ++i) {
-			x = y; y = h1[i + 761];
-			a = h1[i] + x + y;
-			h1[i] = barrett_32(a);
-		}
-		t1 = hal_get_time();
-		console_putint(t1 - t0);
-		console_puts(" clock cycles (mock_mult)\r\n");
-
-		/* t0 = hal_get_time();
-		ref_schoolbook_mult(h1, c, f);
-		t1 = hal_get_time();
-		console_putint(t1 - t0);
-		console_puts(" clock cycles (ref_mult)\r\n"); */
+		/* for (i = 0; i < 768; ++i) {
+			console_puts("Term ");
+			console_putint(i);
+			console_puts(": c_i = ");
+			console_putint(c[i]);
+			console_puts("; f_i = ");
+			console_putint(f[i]);
+			console_puts(" ...\r\n");
+		} */
 
 		t0 = hal_get_time();
 		Toom4_mult(h2, c, f);
@@ -197,6 +215,22 @@ int main(void) {
 		t1 = hal_get_time();
 		console_putint(t1 - t0);
 		console_puts(" clock cycles (Toom4_mult)\r\n");
+
+		t0 = hal_get_time();
+		mock_mult(h1, c, f, 761);
+		y = h1[761];
+		a = h1[0] + y;
+		h1[0] = barrett_32(a);
+		a = h1[760] + h1[1520];
+		h1[760] = barrett_32(a);
+		for (i = 1; i < 760; ++i) {
+			x = y; y = h1[i + 761];
+			a = h1[i] + x + y;
+			h1[i] = barrett_32(a);
+		}
+		t1 = hal_get_time();
+		console_putint(t1 - t0);
+		console_puts(" clock cycles (mock_mult)\r\n");
 
 		t0 = hal_get_time();
 		mock_Karatsuba_mult(h3, c, f, 768, 1);
@@ -239,6 +273,35 @@ int main(void) {
 			console_putint(h2[i]);
 			console_puts(" != ");
 			console_putint(h3[i]);
+			console_puts("\r\n");
+		}
+
+		t0 = hal_get_time();
+		ref_schoolbook_mult(h1, c, f);
+		t1 = hal_get_time();
+		console_putint(t1 - t0);
+		console_puts(" clock cycles (ref_mult)\r\n");	
+
+		t0 = hal_get_time();
+		// smlal_mult(h4, c, f, 764);
+		three_way_Karatsuba_mult(h32, (uint32_t *)c, (uint32_t *)f);
+		t1 = hal_get_time();
+		console_putint(t1 - t0);
+		console_puts(" clock cycles (smlal_mult)\r\n");
+
+		t0 = hal_get_time();
+		mock_mult(h5, c, f, 761);
+		t1 = hal_get_time();
+		console_putint(t1 - t0);
+		console_puts(" clock cycles (smladx_mult)\r\n");
+
+		 for (i = 0; i < 1536; ++i) if (h5[i] != h32[i]) {
+			console_puts("h5 vs. h4 -- ");
+			console_putint(i);
+			console_puts(": WRONG!!! => ");
+			console_putint(h5[i]);
+			console_puts(" != ");
+			console_putint(h4[i]);
 			console_puts("\r\n");
 		}
 	}

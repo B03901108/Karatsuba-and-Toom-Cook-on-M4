@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "my_stm32fIO.h"
 
 /*
@@ -97,5 +98,19 @@ void console_putint(int64_t numIn) {
 		numOut[j] ^= numOut[i];
 		numOut[i] ^= numOut[j];
 	}
+	console_puts(numOut);
+}
+
+void console_puthex(uint64_t bitstr) {
+	int i, j;
+	uint8_t hexChar;
+	char numOut[17];
+
+	for (i = 15; i >= 0; --i, bitstr >>= 4) {
+		hexChar = bitstr & 15;
+		if (hexChar > 9) numOut[i] = hexChar + 'A' - 10;
+		else numOut[i] = hexChar + '0';
+	}
+	numOut[16] = '\0';
 	console_puts(numOut);
 }

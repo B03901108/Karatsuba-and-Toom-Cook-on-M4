@@ -578,6 +578,35 @@ __attribute__( ( always_inline ) ) __STATIC_INLINE uint32_t __SMLADX (uint32_t o
   return(result);
 }
 
+__attribute__( ( always_inline ) ) __STATIC_INLINE int32_t sxt19(uint32_t X) {
+  int32_t Y;
+  __ASM volatile ("sbfx %0, %1, #0, #19" : "=r" (Y) : "r" (X) : "cc");
+  return (Y);
+}
+
+__attribute__( ( always_inline ) ) __STATIC_INLINE int32_t sxt6(uint32_t X) {
+  int32_t Y;
+  __ASM volatile ("sbfx %0, %1, #0, #6" : "=r" (Y) : "r" (X) : "cc");
+  return (Y);
+}
+
+__attribute__( ( always_inline ) ) __STATIC_INLINE uint64_t __SMLAL (uint32_t op1, uint32_t op2, uint64_t acc)
+{
+  union llreg_u{
+    uint32_t w32[2];
+    uint64_t w64;
+  } llr;
+  llr.w64 = acc;
+
+#ifndef __ARMEB__   // Little endian
+  __ASM volatile ("smlal %0, %1, %2, %3" : "=r" (llr.w32[0]), "=r" (llr.w32[1]): "r" (op1), "r" (op2) , "0" (llr.w32[0]), "1" (llr.w32[1]) : "cc");
+#else               // Big endian
+  __ASM volatile ("smlal %0, %1, %2, %3" : "=r" (llr.w32[1]), "=r" (llr.w32[0]): "r" (op1), "r" (op2) , "0" (llr.w32[1]), "1" (llr.w32[0]) : "cc");
+#endif
+
+  return(llr.w64);
+}
+
 __attribute__( ( always_inline ) ) __STATIC_INLINE uint64_t __SMLALD (uint32_t op1, uint32_t op2, uint64_t acc)
 {
   union llreg_u{
