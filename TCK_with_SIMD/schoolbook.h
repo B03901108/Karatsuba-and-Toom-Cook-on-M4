@@ -7,6 +7,8 @@
 
 void ref_schoolbook_mult(int16_t *, const int16_t *, const int16_t *);
 void schoolbook_mult(int16_t *, const int16_t *, const int16_t *);
+void schoolbook_mult_unreduced(int32_t *, const int16_t *, const int16_t *);
+
 void smlal_mult(int16_t *, const int16_t *, const int16_t *, const int16_t);
 void smlal_mult_64(int32_t *, const int16_t *, const int16_t *);
 

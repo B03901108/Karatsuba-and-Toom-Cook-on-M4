@@ -49,6 +49,28 @@ void schoolbook_mult(int16_t *h, const int16_t *c, const int16_t *f) {
   h[i] = 0;
 }
 
+void schoolbook_mult_unreduced(int32_t *h, const int16_t *c, const int16_t *f) {
+  int i, j;
+  int32_t a;
+
+  for (i = 0; i < UNITLEN; ++i) {
+    j = 1 - (i & 1);
+    a = (j) ? (c[0] * f[i]) : (0);
+    for (; j <= i; j += 2)
+      a = __SMLADX((*(uint32_t *)(c + j)), (*(uint32_t *)(f + i - j - 1)), a);
+    h[i] = a;
+  }
+  for (; i < (UNITLEN << 1) - 1; ++i) {
+    j = 1 - (i & 1);
+    a = (j) ? (c[i - UNITLEN + 1] * f[UNITLEN - 1]) : (0);
+    for (j += i - UNITLEN + 1; j < UNITLEN; j += 2)
+      a = __SMLADX((*(uint32_t *)(c + j)), (*(uint32_t *)(f + i - j - 1)), a);
+    h[i] = a;
+  }
+
+  h[i] = 0;
+}
+
 // $len assumed 4x
 void smlal_mult(int16_t *h, const int16_t *c, const int16_t *f, const int16_t len) {
   int i, j, k, j_begin, j_end;

@@ -1,5 +1,8 @@
 #include "Karatsuba.h"
 
+extern void gf_polymul_64x64sh_unreduced (int *h, int *f, int *g, int cut);
+extern void gf_polymul_192x192sh_unreduced (int *h, int *f, int *g, int cut);
+
 // h[2 * len - 1], c[len], f[len], inputScale: |worst-case c_i / 2295|
 // TODO: one loop for two array additions or two indep. loops
 // TODO: save cS & fS by reusing c & f, cSfS by c0/1f0/1, ...
@@ -56,56 +59,567 @@ void Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f, const int16_t len, int8_
 
 // 192x192 -> 3-layer Karatsuba
 // TODO: generalization
-void iter_Karatsuba_mult(int16_t *h, int16_t *c, int16_t *f) {
-  int i, j1, j2, k, auxlen;
-  int32_t a;
-  // int8_t scaleIn[648]; // TODO: dynamic checking
-  int16_t c_ext[648], f_ext[648], h_ext[1296];
-  int16_t * cf, * cSfS, * bndry;
-  int16_t len = 192, offset = 192, offsetArr[3] = { 864, 576, 384 };
+void iter_Karatsuba_mult(int32_t *h, uint32_t *c, uint32_t *f) {
+  int i, j1, j2, k;
+  int16_t mono_c, mono_f;
+  int16_t *c_sch, *f_sch;
+  uint32_t r0, r1, r2, r3, r4, r5, r6, r7;
+  uint32_t *c_to, *f_to, *c_from1, *f_from1, *c_from2, *f_from2;
+  uint32_t c_ext[324], f_ext[324];
+  int32_t accum, ir0, ir1, ir2, ir3, ir4, ir5, ir6, ir7, ir8, ir9, ir10, ir11;
+  int32_t *cf, *cSfS, *bndry, *op_accum, *op_tmp, *op_tmp2;
+  int32_t h_ext[1296];
 
-  for (i = 0; i < 192; i += 2) {
-    __asm__ volatile("ldr %0, [%1]"
-      : "=r" (*(uint32_t *)(c_ext + i))
-      : "r" (c + i)
-      : "cc");
-    __asm__ volatile("ldr %0, [%1]"
-      : "=r" (*(uint32_t *)(f_ext + i))
-      : "r" (f + i)
-      : "cc");
+  c_to = c_ext; f_to = f_ext; c_from1 = c; f_from1 = f;
+  for (i = 0; i < 96; i += 4) {
+    r0 = *(c_from1++);
+    r1 = *(c_from1++);
+    r2 = *(c_from1++);
+    r3 = *(c_from1++);
+    r4 = *(f_from1++);
+    r5 = *(f_from1++);
+    r6 = *(f_from1++);
+    r7 = *(f_from1++);
+    *(c_to++) = r0;
+    *(c_to++) = r1;
+    *(c_to++) = r2;
+    *(c_to++) = r3;
+    *(f_to++) = r4;
+    *(f_to++) = r5;
+    *(f_to++) = r6;
+    *(f_to++) = r7;
   }
-  for (i = 0; i < 3; ++i, len = auxlen, offset += (offset >> 1)) {
-    auxlen = len >> 1;
-    for (j1 = auxlen, j2 = 0, k = offset; j1 < offset; j1 += 2, j2 += 2, k += 2) {
-      if (j2 == auxlen) { j1 += auxlen; j2 = 0; }
-      // TODO: input modular arithmetic: dynamic checking? pre-computating?
-      (*(uint32_t *)(c_ext + k)) = __SADD16((*(uint32_t *)(c_ext + j1)), (*(uint32_t *)(c_ext + j1 - auxlen)));
-      (*(uint32_t *)(f_ext + k)) = __SADD16((*(uint32_t *)(f_ext + j1)), (*(uint32_t *)(f_ext + j1 - auxlen)));
+  c_from2 = c_to - 48; c_from1 = c_to - 96; f_from2 = f_to - 48; f_from1 = f_to - 96;
+  for (j1 = 48; j1 < 96; ++j1) {
+    r0 = *(c_from1++);
+    r1 = *(c_from2++);
+    r2 = *(f_from1++);
+    r3 = *(f_from2++);
+    r0 = __SADD16(r0, r1);
+    r2 = __SADD16(r2, r3);
+    r0 = barrett_16x2(r0);
+    *(f_to++) = r2;
+    *(c_to++) = r0;
+  }
+  c_from2 = c_to - 120; c_from1 = c_to - 144; f_from2 = f_to - 120; f_from1 = f_to - 144;
+  for (i = 0, j1 = 24; j1 < 144; ++i, ++j1) {
+    if (i == 24) { i = 0; j1 += 24; c_from1 += 24; c_from2 += 24; f_from1 += 24; f_from2 += 24; }
+    r0 = *(c_from1++);
+    r1 = *(c_from2++);
+    r2 = *(f_from1++);
+    r3 = *(f_from2++);
+    r0 = __SADD16(r0, r1);
+    r2 = __SADD16(r2, r3);
+    r0 = barrett_16x2(r0);
+    *(f_to++) = r2;
+    *(c_to++) = r0;
+  }
+  c_from2 = c_to - 204; c_from1 = c_to - 216; f_from2 = f_to - 204; f_from1 = f_to - 216;
+  for (i = 0, j1 = 12; j1 < 216; ++i, ++j1) {
+    if (i == 12) { i = 0; j1 += 12; c_from1 += 12; c_from2 += 12; f_from1 += 12; f_from2 += 12; }
+    r0 = *(c_from1++);
+    r1 = *(c_from2++);
+    r2 = *(f_from1++);
+    r3 = *(f_from2++);
+    r0 = __SADD16(r0, r1);
+    r2 = __SADD16(r2, r3);
+    r0 = barrett_16x2(r0);
+    *(f_to++) = r2;
+    *(c_to++) = r0;
+  }
+
+  c_to -= 324;
+  c_from1 = c_to;
+  f_to -= 324;
+  f_from1 = f_to;
+  cf = h_ext;
+  cSfS = cf + 1296;
+  while (cf != cSfS) {
+    c_to -= 1;
+    f_to -= 1;
+    bndry = cf + 24;
+    r2 = *(c_from1 + 1);
+    r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+    r0 = *(c_from1--);
+    ir0 = 0;
+    ir1 = 0;
+    ir2 = 0;
+    while (cf != bndry) {
+      r4 = *(f_from1 + 1);
+      r3 = *(f_from1--);
+      ir1 = __SMLADX(r0, r3, ir1);
+      ir3 = __SMUADX(r0, r4);
+      ir3 = __SMLADX(r2, r3, ir3);
+      ir5 = __SMUADX(r2, r4);
+      ir0 = __SMLABB(r0, r3, ir0);
+      ir2 = __SMLADX(r1, r3, ir2);
+      ir2 = __SMLABB(r0, r4, ir2);
+      ir4 = __SMUADX(r1, r4);  
+      ir4 = __SMLATT(r2, r3, ir4);
+      ir6 = __SMULTT(r2, r4);
+      c_from1 += 3;
+      while (f_from1 != f_to) {
+        r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+        r0 = *(c_from1++);
+        r2 = *(c_from1++);
+        r4 = *(f_from1--);
+        r3 = *(f_from1--);
+        ir1 = __SMLADX(r0, r3, ir1);
+        ir3 = __SMLADX(r0, r4, ir3);
+        ir3 = __SMLADX(r2, r3, ir3);
+        ir5 = __SMLADX(r2, r4, ir5);
+        ir0 = __SMLABB(r0, r3, ir0);
+        ir2 = __SMLADX(r1, r3, ir2);
+        ir2 = __SMLABB(r0, r4, ir2);
+        ir4 = __SMLADX(r1, r4, ir4);  
+        ir4 = __SMLATT(r2, r3, ir4);
+        ir6 = __SMLATT(r2, r4, ir6);
+      }
+      *(cf++) = ir0;
+      *(cf++) = ir1;
+      *(cf++) = ir2;
+      *(cf++) = ir3;
+
+      r2 = *(c_from1 + 1);
+      r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+      r0 = *(c_from1--);
+      ir5 = __SMLADX(r0, r3, ir5);
+      ir3 = __SMUADX(r0, r4);
+      ir3 = __SMLADX(r2, r3, ir3);
+      ir1 = __SMUADX(r2, r4);
+      ir4 = __SMLABB(r0, r3, ir4);
+      ir6 = __SMLADX(r1, r3, ir6);
+      ir6 = __SMLABB(r0, r4, ir6);
+      ir0 = __SMUADX(r1, r4);  
+      ir0 = __SMLATT(r2, r3, ir0);
+      ir2 = __SMULTT(r2, r4);
+      f_from1 += 3;
+      while (c_from1 != c_to) {
+        r2 = *(c_from1--);
+        r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+        r0 = *(c_from1--);
+        r3 = *(f_from1++);
+        r4 = *(f_from1++);
+        ir5 = __SMLADX(r0, r3, ir5);
+        ir3 = __SMLADX(r0, r4, ir3);
+        ir3 = __SMLADX(r2, r3, ir3);
+        ir1 = __SMLADX(r2, r4, ir1);
+        ir4 = __SMLABB(r0, r3, ir4);
+        ir6 = __SMLADX(r1, r3, ir6);
+        ir6 = __SMLABB(r0, r4, ir6);
+        ir0 = __SMLADX(r1, r4, ir0);  
+        ir0 = __SMLATT(r2, r3, ir0);
+        ir2 = __SMLATT(r2, r4, ir2);
+      }
+      *(cf++) = ir4;
+      *(cf++) = ir5;
+      *(cf++) = ir6;
+      *(cf++) = ir3;
+    }
+    bndry += 16;
+    c_to += 13;
+    f_to += 13;
+    while (1) {
+      c_from1 += 3;
+      r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+      r0 = *(c_from1++);
+      r2 = *(c_from1++);
+      ir1 = __SMLADX(r0, r3, ir1);
+      ir3 = __SMUADX(r0, r4);
+      ir3 = __SMLADX(r2, r3, ir3);
+      ir5 = __SMUADX(r2, r4);
+      ir0 = __SMLABB(r0, r3, ir0);
+      ir2 = __SMLADX(r1, r3, ir2);
+      ir2 = __SMLABB(r0, r4, ir2);
+      ir4 = __SMUADX(r1, r4);  
+      ir4 = __SMLATT(r2, r3, ir4);
+      ir6 = __SMULTT(r2, r4);
+
+      if (cf == bndry) {
+        *(cf++) = ir0;
+        *(cf++) = ir1;
+        *(cf++) = ir2;
+        *(cf++) = ir3;
+        *(cf++) = ir4;
+        *(cf++) = ir5;
+        *(cf++) = ir6;
+        *(cf++) = 0;
+        break;
+      }
+
+      f_from1 -= 3;
+      while (c_from1 != c_to) {
+        r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+        r0 = *(c_from1++);
+        r2 = *(c_from1++);
+        r4 = *(f_from1--);
+        r3 = *(f_from1--);
+        ir1 = __SMLADX(r0, r3, ir1);
+        ir3 = __SMLADX(r0, r4, ir3);
+        ir3 = __SMLADX(r2, r3, ir3);
+        ir5 = __SMLADX(r2, r4, ir5);
+        ir0 = __SMLABB(r0, r3, ir0);
+        ir2 = __SMLADX(r1, r3, ir2);
+        ir2 = __SMLABB(r0, r4, ir2);
+        ir4 = __SMLADX(r1, r4, ir4);  
+        ir4 = __SMLATT(r2, r3, ir4);
+        ir6 = __SMLATT(r2, r4, ir6);
+      }
+      *(cf++) = ir0;
+      *(cf++) = ir1;
+      *(cf++) = ir2;
+      *(cf++) = ir3;
+
+      f_from1 += 3;
+      r3 = *(f_from1++);
+      r4 = *(f_from1++);
+      ir5 = __SMLADX(r0, r3, ir5);
+      ir3 = __SMUADX(r0, r4);
+      ir3 = __SMLADX(r2, r3, ir3);
+      ir1 = __SMUADX(r2, r4);
+      ir4 = __SMLABB(r0, r3, ir4);
+      ir6 = __SMLADX(r1, r3, ir6);
+      ir6 = __SMLABB(r0, r4, ir6);
+      ir0 = __SMUADX(r1, r4);  
+      ir0 = __SMLATT(r2, r3, ir0);
+      ir2 = __SMULTT(r2, r4);
+      c_from1 -= 3;
+      while (f_from1 != f_to) {
+        r2 = *(c_from1--);
+        r1 = *((uint32_t *)(((int16_t *)c_from1) + 1));
+        r0 = *(c_from1--);
+        r3 = *(f_from1++);
+        r4 = *(f_from1++);
+        ir5 = __SMLADX(r0, r3, ir5);
+        ir3 = __SMLADX(r0, r4, ir3);
+        ir3 = __SMLADX(r2, r3, ir3);
+        ir1 = __SMLADX(r2, r4, ir1);
+        ir4 = __SMLABB(r0, r3, ir4);
+        ir6 = __SMLADX(r1, r3, ir6);
+        ir6 = __SMLABB(r0, r4, ir6);
+        ir0 = __SMLADX(r1, r4, ir0);  
+        ir0 = __SMLATT(r2, r3, ir0);
+        ir2 = __SMLATT(r2, r4, ir2);
+      }
+      *(cf++) = ir4;
+      *(cf++) = ir5;
+      *(cf++) = ir6;
+      *(cf++) = ir3;
+    }
+  }
+  /* cf = h_ext; c_sch = (int16_t *)(c_to - 324); f_sch = ((int16_t *)(f_to - 324)) - 1;
+  while (c_sch != (int16_t *)c_to) {
+    for (i = 1; i < 25; ++i) {
+      j1 = i & 1;
+      if (j1) {
+        mono_c = *c_sch;
+        mono_f = *(++f_sch); 
+        accum = mono_c * mono_f;
+        c_from1 = (uint32_t *)(c_sch + 1);
+        f_from1 = (uint32_t *)(f_sch + (-2));
+      } else {
+        accum = 0;
+        c_from1 = (uint32_t *)c_sch;
+        f_from1 = (uint32_t *)f_sch;
+        f_sch += 1;
+      }
+      for (; j1 < i; j1 += 2) {
+        r0 = *(c_from1++);
+        r1 = *(f_from1--);
+        accum = __SMLADX(r0, r1, accum);
+      }
+      *(cf++) = accum;
+    }
+    for (i = 1; i < 24; ++i) {
+      j1 = i & 1;
+      if (j1) {
+        mono_c = *(++c_sch);
+        mono_f = *f_sch; 
+        accum = mono_c * mono_f;
+        c_from1 = (uint32_t *)(c_sch + 1);
+        f_from1 = (uint32_t *)(f_sch + (-2));
+      } else {
+        accum = 0;
+        c_sch += 1;
+        c_from1 = (uint32_t *)c_sch;
+        f_from1 = (uint32_t *)(f_sch + (-1));
+      }
+      for (j1 += i; j1 < 24; j1 += 2) {
+        r0 = *(c_from1++);
+        r1 = *(f_from1--);
+        accum = __SMLADX(r0, r1, accum);
+      }
+      *(cf++) = accum;
+    }
+    *(cf++) = 0;
+    c_sch += 1;
+  } */
+
+  cf = h_ext; bndry = cf + 864; cSfS = bndry;
+  for (; cf < bndry; cf += 96) {
+    op_accum = cf + 24; op_tmp = cf + 48;
+    for (j1 = 0; j1 < 24; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
+
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+    op_tmp2 = cf + 24;
+    for (j1 = 0; j1 < 24; j1 += 3) {
+      ir0 = *(op_tmp++);
+      ir1 = *(op_tmp2++);
+      ir2 = *(op_tmp++);
+      ir3 = *(op_tmp2++);
+      ir4 = *(op_tmp++);
+      ir5 = *(op_tmp2++);
+
+      ir0 = ir0 - ir1;
+      ir2 = ir2 - ir3;
+      ir4 = ir4 - ir5;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+    }
+    op_accum = cf + 24; op_tmp = cf;
+    for (j1 = 0; j1 < 24; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
+
+      ir0 = ir0 + ir1;
+      ir2 = ir2 + ir3;
+      ir4 = ir4 + ir5;
+      ir6 = ir6 + ir7;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+    op_accum = cf + 24;
+    for (j1 = 0; j1 < 48; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(cSfS++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(cSfS++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(cSfS++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(cSfS++);
+
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
     }
   }
 
-  for (i = 0; i < 648; i += 24) schoolbook_mult(h_ext + (i << 1), c_ext + i, f_ext + i);
+  cf = h_ext; bndry = cf + 576; cSfS = bndry;
+  for (; cf < bndry; cf += 192) {
+    op_accum = cf + 48; op_tmp = cf + 96;
+    for (j1 = 0; j1 < 48; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
 
-  for (i = 0; i < 3; ++i, len = auxlen) {
-    bndry = h_ext + offsetArr[i];
-    auxlen = len << 1;
-    for (cf = h_ext, cSfS = bndry; cf < bndry; cf += (auxlen << 1), cSfS += auxlen) {
-      for (j1 = len, j2 = auxlen; j1 < auxlen; j1 += 2, j2 += 2)
-        (*(uint32_t *)(cf + j1)) = __SSUB16((*(uint32_t *)(cf + j2)), (*(uint32_t *)(cf + j1)));
-
-      for (k = len; j2 < (auxlen << 1); j1 += 2, j2 += 2, k += 2)
-        (*(uint32_t *)(cf + j1)) = __SSUB16((*(uint32_t *)(cf + j2)), (*(uint32_t *)(cf + k)));
-
-      for (j1 = len, j2 = 0; j2 < len; j1 += 2, j2 += 2)
-        (*(uint32_t *)(cf + j1)) = __SADD16((*(uint32_t *)(cf + j1)), (*(uint32_t *)(cf + j2)));
-
-      for (j1 = len, j2 = 0; j2 < auxlen; j1 += 2, j2 += 2)
-        (*(uint32_t *)(cf + j1)) = __SSUB16((*(uint32_t *)(cSfS + j2)), (*(uint32_t *)(cf + j1)));
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
     }
-    if (i == 1) for (j1 = 0; j1 < offsetArr[i]; j1 += 2)
-      (*(uint32_t *)(h_ext + j1)) = barrett_16x2((*(uint32_t *)(h_ext + j1)));
+    op_tmp2 = cf + 48;
+    for (j1 = 0; j1 < 48; j1 += 3) {
+      ir0 = *(op_tmp++);
+      ir1 = *(op_tmp2++);
+      ir2 = *(op_tmp++);
+      ir3 = *(op_tmp2++);
+      ir4 = *(op_tmp++);
+      ir5 = *(op_tmp2++);
+
+      ir0 = ir0 - ir1;
+      ir2 = ir2 - ir3;
+      ir4 = ir4 - ir5;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+    }
+    op_accum = cf + 48; op_tmp = cf;
+    for (j1 = 0; j1 < 48; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
+
+      ir0 = ir0 + ir1;
+      ir2 = ir2 + ir3;
+      ir4 = ir4 + ir5;
+      ir6 = ir6 + ir7;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+    op_accum = cf + 48;
+    for (j1 = 0; j1 < 96; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(cSfS++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(cSfS++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(cSfS++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(cSfS++);
+
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
   }
-  for (i = 0; i < 383; ++i) h[i] = h_ext[i];
+
+  cf = h_ext; cSfS = cf + 384;
+  op_accum = cf + 96; op_tmp = cf + 192;
+  for (j1 = 0; j1 < 96; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(op_tmp++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(op_tmp++);
+
+    ir0 = ir1 - ir0;
+    ir2 = ir3 - ir2;
+    ir4 = ir5 - ir4;
+    ir6 = ir7 - ir6;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+  op_tmp2 = cf + 96;
+  for (j1 = 0; j1 < 96; j1 += 3) {
+    ir0 = *(op_tmp++);
+    ir1 = *(op_tmp2++);
+    ir2 = *(op_tmp++);
+    ir3 = *(op_tmp2++);
+    ir4 = *(op_tmp++);
+    ir5 = *(op_tmp2++);
+
+    ir0 = ir0 - ir1;
+    ir2 = ir2 - ir3;
+    ir4 = ir4 - ir5;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+  }
+  op_accum = cf + 96; op_tmp = cf;
+  for (j1 = 0; j1 < 96; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(op_tmp++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(op_tmp++);
+
+    ir0 = ir0 + ir1;
+    ir2 = ir2 + ir3;
+    ir4 = ir4 + ir5;
+    ir6 = ir6 + ir7;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+  op_accum = cf + 96;
+  for (j1 = 0; j1 < 192; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(cSfS++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(cSfS++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(cSfS++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(cSfS++);
+
+    ir0 = ir1 - ir0;
+    ir2 = ir3 - ir2;
+    ir4 = ir5 - ir4;
+    ir6 = ir7 - ir6;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+
+  op_accum = h; op_tmp = h_ext;
+  for (i = 0; i < 384; i += 12) {
+    ir0 = *(op_tmp++);
+    ir1 = *(op_tmp++);
+    ir2 = *(op_tmp++);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_tmp++);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_tmp++);
+    ir7 = *(op_tmp++);
+    ir8 = *(op_tmp++);
+    ir9 = *(op_tmp++);
+    ir10 = *(op_tmp++);
+    ir11 = *(op_tmp++);
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir1;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir3;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir5;
+    *(op_accum++) = ir6;
+    *(op_accum++) = ir7;
+    *(op_accum++) = ir8;
+    *(op_accum++) = ir9;
+    *(op_accum++) = ir10;
+    *(op_accum++) = ir11;
+  }
 }
 
 // int16_t 768x768 => int32_t 1536
@@ -138,11 +652,10 @@ void three_way_Karatsuba_mult(int32_t *h, uint32_t *c, uint32_t *f) {
 }
 
 void two_layer_Karatsuba_mult(int32_t *h, uint32_t *c, uint32_t *f, uint8_t scaleIn) {
-  int i, j1, j2, k, auxlen;
+  int i, j1, j2, k;
   uint32_t c_ext[288], f_ext[288];
   int32_t h_ext[1152];
   int32_t *cf, *cSfS, *bndry;
-  int len = 128, offset = 128, offsetArr[2] = { 768, 512 };
 
   for (i = 0; i < 128; ++i) { c_ext[i] = c[i]; f_ext[i] = f[i]; }
   for (j1 = 0, j2 = 64, k = 128; j2 < 128; ++j1, ++j2, ++k) {
@@ -155,9 +668,31 @@ void two_layer_Karatsuba_mult(int32_t *h, uint32_t *c, uint32_t *f, uint8_t scal
     f_ext[k] = __SADD16(f_ext[j1], f_ext[j2]);
   }
 
-  i = (scaleIn > 1) ? (0) : (128);
-  for (; i < 288; ++i) c_ext[i] = barrett_16x2(c_ext[i]);
-  for (i = 0; i < 288; i += 32) smlal_mult_64(h_ext + (i << 2), (int16_t *)(c_ext + i), (int16_t *)(f_ext + i));
+  if (scaleIn > 1) { // 2 2 2 2 4 4 4 4 8
+    for (i = 0; i < 288; ++i) c_ext[i] = barrett_16x2(c_ext[i]);
+    gf_polymul_64x64sh_unreduced((int *)h_ext, (int *)c_ext, (int *)f_ext, 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 128), (int *)(c_ext + 32), (int *)(f_ext + 32), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 256), (int *)(c_ext + 64), (int *)(f_ext + 64), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 384), (int *)(c_ext + 96), (int *)(f_ext + 96), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 512), (int *)(c_ext + 128), (int *)(f_ext + 128), 7);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 640), (int *)(c_ext + 160), (int *)(f_ext + 160), 7);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 768), (int *)(c_ext + 192), (int *)(f_ext + 192), 7);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 896), (int *)(c_ext + 224), (int *)(f_ext + 224), 7);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 1024), (int *)(c_ext + 256), (int *)(f_ext + 256), 3);
+  } else { // 1 1 1 1 2 2 2 2 4
+    for (i = 128; i < 288; ++i) c_ext[i] = barrett_16x2(c_ext[i]);
+    gf_polymul_64x64sh_unreduced((int *)h_ext, (int *)c_ext, (int *)f_ext, 28);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 128), (int *)(c_ext + 32), (int *)(f_ext + 32), 28);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 256), (int *)(c_ext + 64), (int *)(f_ext + 64), 28);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 384), (int *)(c_ext + 96), (int *)(f_ext + 96), 28);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 512), (int *)(c_ext + 128), (int *)(f_ext + 128), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 640), (int *)(c_ext + 160), (int *)(f_ext + 160), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 768), (int *)(c_ext + 192), (int *)(f_ext + 192), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 896), (int *)(c_ext + 224), (int *)(f_ext + 224), 14);
+    gf_polymul_64x64sh_unreduced((int *)(h_ext + 1024), (int *)(c_ext + 256), (int *)(f_ext + 256), 7);
+  }
+  // for (i = 0; i < 288; i += 32) gf_polymul_64x64sh_unreduced((int *)(h_ext + (i << 2)), (int *)(c_ext + i), (int *)(f_ext + i));
+  // for (i = 0; i < 288; i += 32) smlal_mult_64(h_ext + (i << 2), (int16_t *)(c_ext + i), (int16_t *)(f_ext + i));
 
   bndry = h_ext + 768;
   for (cf = h_ext, cSfS = bndry; cf < bndry; cf += 256, cSfS += 128) {
@@ -175,4 +710,261 @@ void two_layer_Karatsuba_mult(int32_t *h, uint32_t *c, uint32_t *f, uint8_t scal
   }
 
   for (i = 0; i < 512; ++i) h[i] = h_ext[i];
+}
+
+// 768x768 Karatsuba ft. smlal
+void Karatsuba_on_smlal(uint32_t *h, uint32_t *c, uint32_t *f) {
+  int i, j1, j2, k;
+  int16_t mono_c, mono_f;
+  int16_t *c_sch, *f_sch;
+  uint32_t r0, r1, r2, r3, r4, r5, r6, r7;
+  uint32_t *c_to, *f_to, *c_from1, *f_from1, *c_from2, *f_from2;
+  uint32_t c_ext[864], f_ext[864];
+  int32_t accum, ir0, ir1, ir2, ir3, ir4, ir5, ir6, ir7, ir8, ir9, ir10, ir11;
+  int32_t *cf, *cSfS, *bndry, *op_accum, *op_tmp, *op_tmp2;
+  int32_t h_ext[3456];
+
+  c_to = c_ext; f_to = f_ext; c_from1 = c; f_from1 = f;
+  for (i = 0; i < 384; i += 4) {
+    r0 = *(c_from1++);
+    r1 = *(c_from1++);
+    r2 = *(c_from1++);
+    r3 = *(c_from1++);
+    r4 = *(f_from1++);
+    r5 = *(f_from1++);
+    r6 = *(f_from1++);
+    r7 = *(f_from1++);
+    *(c_to++) = r0;
+    *(c_to++) = r1;
+    *(c_to++) = r2;
+    *(c_to++) = r3;
+    *(f_to++) = r4;
+    *(f_to++) = r5;
+    *(f_to++) = r6;
+    *(f_to++) = r7;
+  }
+  c_from2 = c_to - 192; c_from1 = c_to - 384; f_from2 = f_to - 192; f_from1 = f_to - 384;
+  for (j1 = 192; j1 < 384; ++j1) {
+    r0 = *(c_from1++);
+    r1 = *(c_from2++);
+    r2 = *(f_from1++);
+    r3 = *(f_from2++);
+    r0 = __SADD16(r0, r1);
+    r2 = __SADD16(r2, r3);
+    r0 = barrett_16x2(r0);
+    *(f_to++) = r2;
+    *(c_to++) = r0;
+  }
+  c_from2 = c_to - 480; c_from1 = c_to - 576; f_from2 = f_to - 480; f_from1 = f_to - 576;
+  for (i = 0, j1 = 96; j1 < 576; ++i, ++j1) {
+    if (i == 96) { i = 0; j1 += 96; c_from1 += 96; c_from2 += 96; f_from1 += 96; f_from2 += 96; }
+    r0 = *(c_from1++);
+    r1 = *(c_from2++);
+    r2 = *(f_from1++);
+    r3 = *(f_from2++);
+    r0 = __SADD16(r0, r1);
+    r2 = __SADD16(r2, r3);
+    r0 = barrett_16x2(r0);
+    *(f_to++) = r2;
+    *(c_to++) = r0;
+  }
+
+  // call smlal with customized scale
+  gf_polymul_192x192sh_unreduced((int *)h_ext, (int *)c_ext, (int *)f_ext, 28);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 384), (int *)(c_ext + 96), (int *)(f_ext + 96), 28);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 768), (int *)(c_ext + 192), (int *)(f_ext + 192), 28);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 1152), (int *)(c_ext + 288), (int *)(f_ext + 288), 28);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 1536), (int *)(c_ext + 384), (int *)(f_ext + 384), 14);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 1920), (int *)(c_ext + 480), (int *)(f_ext + 480), 14);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 2304), (int *)(c_ext + 576), (int *)(f_ext + 576), 14);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 2688), (int *)(c_ext + 672), (int *)(f_ext + 672), 14);
+  gf_polymul_192x192sh_unreduced((int *)(h_ext + 3072), (int *)(c_ext + 768), (int *)(f_ext + 768), 7);
+
+  cf = h_ext; bndry = cf + 2304; cSfS = bndry;
+  for (; cf < bndry; cf += 768) {
+    op_accum = cf + 192; op_tmp = cf + 384;
+    for (j1 = 0; j1 < 192; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
+
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+    op_tmp2 = cf + 192;
+    for (j1 = 0; j1 < 192; j1 += 3) {
+      ir0 = *(op_tmp++);
+      ir1 = *(op_tmp2++);
+      ir2 = *(op_tmp++);
+      ir3 = *(op_tmp2++);
+      ir4 = *(op_tmp++);
+      ir5 = *(op_tmp2++);
+
+      ir0 = ir0 - ir1;
+      ir2 = ir2 - ir3;
+      ir4 = ir4 - ir5;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+    }
+    op_accum = cf + 192; op_tmp = cf;
+    for (j1 = 0; j1 < 192; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(op_tmp++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(op_tmp++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(op_tmp++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(op_tmp++);
+
+      ir0 = ir0 + ir1;
+      ir2 = ir2 + ir3;
+      ir4 = ir4 + ir5;
+      ir6 = ir6 + ir7;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+    op_accum = cf + 192;
+    for (j1 = 0; j1 < 384; j1 += 4) {
+      ir0 = *op_accum;
+      ir1 = *(cSfS++);
+      ir2 = *(op_accum + 1);
+      ir3 = *(cSfS++);
+      ir4 = *(op_accum + 2);
+      ir5 = *(cSfS++);
+      ir6 = *(op_accum + 3);
+      ir7 = *(cSfS++);
+
+      ir0 = ir1 - ir0;
+      ir2 = ir3 - ir2;
+      ir4 = ir5 - ir4;
+      ir6 = ir7 - ir6;
+      *(op_accum++) = ir0;
+      *(op_accum++) = ir2;
+      *(op_accum++) = ir4;
+      *(op_accum++) = ir6;
+    }
+  }
+
+  cf = h_ext; cSfS = cf + 1536;
+  op_accum = cf + 384; op_tmp = cf + 768;
+  for (j1 = 0; j1 < 384; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(op_tmp++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(op_tmp++);
+
+    ir0 = ir1 - ir0;
+    ir2 = ir3 - ir2;
+    ir4 = ir5 - ir4;
+    ir6 = ir7 - ir6;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+  op_tmp2 = cf + 384;
+  for (j1 = 0; j1 < 384; j1 += 3) {
+    ir0 = *(op_tmp++);
+    ir1 = *(op_tmp2++);
+    ir2 = *(op_tmp++);
+    ir3 = *(op_tmp2++);
+    ir4 = *(op_tmp++);
+    ir5 = *(op_tmp2++);
+
+    ir0 = ir0 - ir1;
+    ir2 = ir2 - ir3;
+    ir4 = ir4 - ir5;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+  }
+  op_accum = cf + 384; op_tmp = cf;
+  for (j1 = 0; j1 < 384; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(op_tmp++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(op_tmp++);
+
+    ir0 = ir0 + ir1;
+    ir2 = ir2 + ir3;
+    ir4 = ir4 + ir5;
+    ir6 = ir6 + ir7;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+  op_accum = cf + 384;
+  for (j1 = 0; j1 < 768; j1 += 4) {
+    ir0 = *op_accum;
+    ir1 = *(cSfS++);
+    ir2 = *(op_accum + 1);
+    ir3 = *(cSfS++);
+    ir4 = *(op_accum + 2);
+    ir5 = *(cSfS++);
+    ir6 = *(op_accum + 3);
+    ir7 = *(cSfS++);
+
+    ir0 = ir1 - ir0;
+    ir2 = ir3 - ir2;
+    ir4 = ir5 - ir4;
+    ir6 = ir7 - ir6;
+    *(op_accum++) = ir0;
+    *(op_accum++) = ir2;
+    *(op_accum++) = ir4;
+    *(op_accum++) = ir6;
+  }
+
+  op_tmp = h_ext;
+  for (i = 0; i < 1536; i += 8) {
+    ir0 = *(op_tmp++);
+    ir1 = *(op_tmp++);
+    ir2 = *(op_tmp++);
+    ir3 = *(op_tmp++);
+    ir4 = *(op_tmp++);
+    ir5 = *(op_tmp++);
+    ir6 = *(op_tmp++);
+    ir7 = *(op_tmp++);
+
+    ir0 = barrett_32(ir0);
+    ir1 = barrett_32(ir1);
+    ir0 = __PKHBT(ir0, ir1, 16);
+    ir2 = barrett_32(ir2);
+    ir3 = barrett_32(ir3);
+    ir2 = __PKHBT(ir2, ir3, 16);
+    ir4 = barrett_32(ir4);
+    ir5 = barrett_32(ir5);
+    ir4 = __PKHBT(ir4, ir5, 16);
+    ir6 = barrett_32(ir6);
+    ir7 = barrett_32(ir7);
+    ir6 = __PKHBT(ir6, ir7, 16);
+
+    *(h++) = ir0;
+    *(h++) = ir2;
+    *(h++) = ir4;
+    *(h++) = ir6;
+  }
 }

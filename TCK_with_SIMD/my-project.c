@@ -7,6 +7,8 @@
 #include "Toom.h"
 #include "my_stm32fIO.h"
 
+extern void gf_polymul_768x768sh (int *h, int *f, int *g);
+
 static void clock_setup(void)
 {
 	/* Enable GPIOG clock for USARTs. (LED: RCC_GPIOG) */
@@ -159,18 +161,16 @@ int main(void) {
 	int i, j;
 	int32_t a, x, y, z, counter;
 	uint64_t t0, t1;
-	int16_t h1[1536], h2[1536], h3[1536], h4[1536], h5[1536];
-	int16_t c[768] = { 0 };
-	int16_t f[768] = { 0 };
-	int32_t h32[1536];
+	int16_t c[768], f[768], h1[1536], h3[1536], h4[1536], h5[1536];
+	int32_t h2[1536], h32[1536];
 
 	console_puts("\nStart of Testing\r\n\n");
 
 	// srand(hal_get_time());
 	srand(23846264); // 31415926 // 53589793
 	for (counter = 0; counter < 1000; ++counter) {
-		for (i = 0; i < 761; ++i) c[i] = (rand() % 1531) * 3 - 2295;
-		for (i = 0; i < 761; ++i) f[i] = (rand() % 3) - 1;
+		for (i = 0; i < 761; ++i) { c[i] = (rand() % 1531) * 3 - 2295; f[i] = (rand() % 3) - 1; }
+		for (; i < 768; ++i) c[i] = f[i] = 0;
 		for (i = 0; i < 1536; ++i) h1[i] = h2[i] = h3[i] = h4[i] = h5[i] = h32[i] = 0;
 
 		/* for (i = 0; i < 768; ++i) {
@@ -184,17 +184,14 @@ int main(void) {
 		} */
 
 		t0 = hal_get_time();
-		Toom4_mult(h2, c, f);
+		Toom4_mult(h2, (uint32_t *)c, (uint32_t *)f);
 
+		h2[760] = barrett_32(h2[760] + h2[1520]);
 		y = h2[761];
-		a = h2[0] + y;
-		h2[0] = barrett_32(a);
-		a = h2[760] + h2[1520];
-		h2[760] = barrett_32(a);
-		for (i = 1; i < 760; ++i) {
-			x = y; y = h2[i + 761];
-			a = h2[i] + x + y;
-			h2[i] = barrett_32(a);
+		h2[0] = barrett_32(h2[0] + y);
+		for (i = 1, j = 762; i < 760; ++i, ++j) {
+			x = y; y = h2[j];
+			h2[i] = barrett_32(h2[i] + x + y);
 		}
 		
 		/* y = *(int32_t *)h2;
@@ -217,7 +214,8 @@ int main(void) {
 		console_puts(" clock cycles (Toom4_mult)\r\n");
 
 		t0 = hal_get_time();
-		mock_mult(h1, c, f, 761);
+		// mock_mult(h1, c, f, 761);
+		gf_polymul_768x768sh((int *)h1, (int *)c, (int *)f);
 		y = h1[761];
 		a = h1[0] + y;
 		h1[0] = barrett_32(a);
@@ -280,11 +278,12 @@ int main(void) {
 		ref_schoolbook_mult(h1, c, f);
 		t1 = hal_get_time();
 		console_putint(t1 - t0);
-		console_puts(" clock cycles (ref_mult)\r\n");	
+		console_puts(" clock cycles (ref_mult)\r\n");
 
 		t0 = hal_get_time();
 		// smlal_mult(h4, c, f, 764);
-		three_way_Karatsuba_mult(h32, (uint32_t *)c, (uint32_t *)f);
+		// three_way_Karatsuba_mult(h32, (uint32_t *)c, (uint32_t *)f);
+		Karatsuba_on_smlal((uint32_t *)h4, (uint32_t *)c, (uint32_t *)f);
 		t1 = hal_get_time();
 		console_putint(t1 - t0);
 		console_puts(" clock cycles (smlal_mult)\r\n");
@@ -295,7 +294,7 @@ int main(void) {
 		console_putint(t1 - t0);
 		console_puts(" clock cycles (smladx_mult)\r\n");
 
-		 for (i = 0; i < 1536; ++i) if (h5[i] != h32[i]) {
+		 for (i = 0; i < 1536; ++i) if (h5[i] != h4[i]) {
 			console_puts("h5 vs. h4 -- ");
 			console_putint(i);
 			console_puts(": WRONG!!! => ");

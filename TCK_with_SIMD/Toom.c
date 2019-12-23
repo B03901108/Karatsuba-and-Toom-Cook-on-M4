@@ -87,86 +87,204 @@ void Toom3_mult(int16_t *h, int16_t *c, int16_t *f) {
 }
 
 // specialized for 768x768
-void Toom4_mult(int16_t *h, int16_t *c, int16_t *f) {
-  int16_t i;
-  int32_t a, b, d, e, g, k, l;
-  int16_t * c1 = c + 192, * c2 = c1 + 192, * c3 = c2 + 192;
-  int16_t * f1 = f + 192, * f2 = f1 + 192, * f3 = f2 + 192;
-  int16_t Cat1[192], Cat_1[192], Cat10[192], Cat_10[192], Cat01[192];
-  int16_t Fat1[192], Fat_1[192], Fat10[192], Fat_10[192], Fat01[192];
-  int16_t * h2 = h + 384, * h4 = h2 + 384, * h6 = h4 + 384; 
-  int16_t h1[383], h3[383], h5[383];
+void Toom4_mult(int32_t *h, uint32_t *c, uint32_t *f) {
+  int i;
+  int32_t a, b, d, e, g, k, l, tmp1, tmp2, tmp3, tmp4, tmp5;
 
-  for (i = 0; i < 192; i += 2){
-    a = __SADD16(*(uint32_t *)(c + i), *(uint32_t *)(c2 + i));
-    b = __SADD16(*(uint32_t *)(c1 + i), *(uint32_t *)(c3 + i));
-    d = __SADD16(a, b); e = __SSUB16(a, b);
+  uint32_t *arrIn0, *arrIn1, *arrIn2, *arrIn3, *arrOutPlus, *arrOutMinus;
+  uint32_t Cat1[96], Cat_1[96], Cat10[96], Cat_10[96], Cat01[96];
+  uint32_t Fat1[96], Fat_1[96], Fat10[96], Fat_10[96], Fat01[96];
+  int32_t *h0, *h1, *h2, *h3, *h4, *h5, *h6;
+  int32_t h1_tmp[384], h3_tmp[384], h5_tmp[384];
 
+  arrIn0 = c; arrIn1 = arrIn0 + 96; arrIn2 = arrIn1 + 96; arrIn3 = arrIn2 + 96;
+  arrOutPlus = Cat1; arrOutMinus = Cat_1;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+
+    d = __SADD16(a, b);
+    e = __SSUB16(a, b);
     a = barrett_16x2(d);
     b = barrett_16x2(e);
-    (*(uint32_t *)(Cat1 + i)) = a; (*(uint32_t *)(Cat_1 + i)) = b;
-  }
-  for (i = 0; i < 192; ++i){
-    a = c[i] + (c2[i] << 2);
-    b = (c1[i] << 1) + (c3[i] << 3);
-    d = a + b; e = a - b;
-
-    a = barrett_32(d);
-    b = barrett_32(e);
-    Cat10[i] = a; Cat_10[i] = b;
-  }
-  for (i = 0; i < 192; ++i){
-    a = (c[i] << 3) + (c1[i] << 2) + (c2[i] << 1) + c3[i];
-    
-    d = barrett_32(a);
-    Cat01[i] = d;
+    *(arrOutPlus++) = a;
+    *(arrOutMinus++) = b;
   }
 
-  for (i = 0; i < 192; i += 2){
-    a = __SADD16(*(uint32_t *)(f + i), *(uint32_t *)(f2 + i));
-    b = __SADD16(*(uint32_t *)(f1 + i), *(uint32_t *)(f3 + i));
-    d = __SADD16(a, b); e = __SSUB16(a, b);
-    (*(uint32_t *)(Fat1 + i)) = d; (*(uint32_t *)(Fat_1 + i)) = e;
-  }
-  for (i = 0; i < 192; i += 2){
-    d = f1[i] << 1;
-    *(((int16_t *)(&d)) + 1) = f1[i + 1] << 1;
-    e = f2[i] << 2;
-    *(((int16_t *)(&e)) + 1) = f2[i + 1] << 2;
-    g = f3[i] << 3;
-    *(((int16_t *)(&g)) + 1) = f3[i + 1] << 3;
+  arrIn0 -= 96; arrIn1 -= 96; arrIn2 -= 96; arrIn3 -= 96;
+  arrOutPlus = Cat10; arrOutMinus = Cat_10;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    b = b & 0xFFFF3FFF;
+    d = d & 0xFFFF7FFF;
+    e = e & 0xFFFF1FFF;
+    b = b << 2;
+    d = d << 1;
+    e = e << 3;
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+    e = barrett_16x2(b);
 
-    a = __SADD16(*(uint32_t *)(f + i), e);
-    b = __SADD16(d, g);
-    d = __SADD16(a, b); e = __SSUB16(a, b);
-    (*(uint32_t *)(Fat10 + i)) = d; (*(uint32_t *)(Fat_10 + i)) = e;
-  }
-  for (i = 0; i < 192; ++i){
-    a = (f[i] << 3) + (f1[i] << 2) + (f2[i] << 1) + f3[i];
-    Fat01[i] = a;
+    d = __SADD16(a, e);
+    b = __SSUB16(a, e);
+    a = barrett_16x2(d);
+    e = barrett_16x2(b);
+    *(arrOutPlus++) = a;
+    *(arrOutMinus++) = e;
   }
 
-  /* Karatsuba_mult(h, c, f, 192, 1);
-  Karatsuba_mult(h1, Cat01, Fat01, 192, 1);
-  Karatsuba_mult(h2, Cat1, Fat1, 192, 1);
-  Karatsuba_mult(h3, Cat_1, Fat_1, 192, 1);
-  Karatsuba_mult(h4, Cat10, Fat10, 192, 1);
-  Karatsuba_mult(h5, Cat_10, Fat_10, 192, 1);
-  Karatsuba_mult(h6, c3, f3, 192, 1); */
-  iter_Karatsuba_mult(h, c, f);
-  iter_Karatsuba_mult(h1, Cat01, Fat01);
+  arrIn0 -= 96; arrIn1 -= 96; arrIn2 -= 96; arrIn3 -= 96;
+  arrOutPlus = Cat01;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    a = a & 0xFFFF1FFF;
+    b = b & 0xFFFF7FFF;
+    d = d & 0xFFFF3FFF;
+    a = a << 3;
+    b = b << 1;
+    d = d << 2;
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+    d = barrett_16x2(a);
+
+    e = __SADD16(d, b);
+    a = barrett_16x2(e);
+    *(arrOutPlus++) = a;
+  }
+
+  arrIn0 = f; arrIn1 = arrIn0 + 96; arrIn2 = arrIn1 + 96; arrIn3 = arrIn2 + 96;
+  arrOutPlus = Fat1; arrOutMinus = Fat_1;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+
+    d = __SADD16(a, b);
+    e = __SSUB16(a, b);
+    *(arrOutPlus++) = d;
+    *(arrOutMinus++) = e;
+  }
+
+  arrIn0 -= 96; arrIn1 -= 96; arrIn2 -= 96; arrIn3 -= 96;
+  arrOutPlus = Fat10; arrOutMinus = Fat_10;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    b = b & 0xFFFF3FFF;
+    d = d & 0xFFFF7FFF;
+    e = e & 0xFFFF1FFF;
+    b = b << 2;
+    d = d << 1;
+    e = e << 3;
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+
+    d = __SADD16(a, b);
+    e = __SSUB16(a, b);
+    *(arrOutPlus++) = d;
+    *(arrOutMinus++) = e;
+  }
+
+  arrIn0 -= 96; arrIn1 -= 96; arrIn2 -= 96; arrIn3 -= 96;
+  arrOutPlus = Fat01;
+  for (i = 0; i < 96; ++i){
+    a = *(arrIn0++);
+    b = *(arrIn2++);
+    d = *(arrIn1++);
+    e = *(arrIn3++);
+    a = a & 0xFFFF1FFF;
+    b = b & 0xFFFF7FFF;
+    d = d & 0xFFFF3FFF;
+    a = a << 3;
+    b = b << 1;
+    d = d << 2;
+    a = __SADD16(a, b);
+    b = __SADD16(d, e);
+
+    d = __SADD16(a, b);
+    *(arrOutPlus++) = d;
+  }
+
+  h0 = h; h1 = h1_tmp; h2 = h0 + 384; h3 = h3_tmp; h4 = h2 + 384; h5 = h5_tmp; h6 = h4 + 384;
+  iter_Karatsuba_mult(h0, c, f);
+  iter_Karatsuba_mult(h1_tmp, Cat01, Fat01);
   iter_Karatsuba_mult(h2, Cat1, Fat1);
-  iter_Karatsuba_mult(h3, Cat_1, Fat_1);
+  iter_Karatsuba_mult(h3_tmp, Cat_1, Fat_1);
   iter_Karatsuba_mult(h4, Cat10, Fat10);
-  iter_Karatsuba_mult(h5, Cat_10, Fat_10);
-  iter_Karatsuba_mult(h6, c3, f3);
+  iter_Karatsuba_mult(h5_tmp, Cat_10, Fat_10);
+  iter_Karatsuba_mult(h6, (c + 288), (f + 288));
 
+  /*    1     0     0     0     0     0     0
+     -2  -204 -1531  1020  2168  2219    -2
+  -1149     0  1531  1531  1339  1339     4
+  -2293   255 -2294  1785   255     0 -2293
+   1148     0   765   765 -1339 -1339    -5
+   2295   -51  1530  -510  2168 -2219  2295
+      0     0     0     0     0     0     1 */
   for (i = 0; i < 383; ++i){
-    a = h[i]; b = h1[i]; d = h2[i]; e = h3[i]; g = h4[i]; k = h5[i]; l = h6[i];
+    a = *(h0++);
+    b = *h1;
+    d = *h2;
+    e = *h3;
+    g = *h4;
+    k = *h5;
+    l = *(h6++);
+    a = barrett_32(a);
+    b = barrett_32(b);
+    d = barrett_32(d);
+    e = barrett_32(e);
+    g = barrett_32(g);
+    k = barrett_32(k);
+    l = barrett_32(l);
+    a = __PKHBT(a, d, 16);
+    e = __PKHBT(e, g, 16);
+    k = __PKHBT(k, l, 16);
 
-    // 4104x +/-2295 (+/-9418787) to avoid overflow during freeze
-    // use squeeze due to the wide input range 116965x but not speed!!!
-    b += g; // h: 4, h1: 8, h2: 4, h3: 4, h4: 4, h5: 4, h6: 4
+    d = (-204) * b;
+    d = __SMLAD(a, 0xFA05FFFE, d);
+    d = __SMLAD(e, 0x087803FC, d);
+    d = __SMLAD(k, 0xFFFE08AB, d);
+    
+    g = __SMUAD(a, 0x05FBFB83);
+    g = __SMLAD(e, 0x053B05FB, g);
+    g = __SMLAD(k, 0x0004053B, g);
+    
+    l = (255) * b;
+    l = __SMLAD(a, 0xF70AF70B, l);
+    l = __SMLAD(e, 0x00FF06F9, l);
+    l = __SMLAD(k, 0xF70B0000, l);
+
+    tmp1 = __SMUAD(a, 0x02FD047C);
+    tmp1 = __SMLAD(e, 0xFAC502FD, tmp1);
+    tmp1 = __SMLAD(k, 0xFFFBFAC5, tmp1);
+
+    tmp2 = (-51) * b;
+    tmp2 = __SMLAD(a, 0x05FA08F7, tmp2);
+    tmp2 = __SMLAD(e, 0x0878FE02, tmp2);
+    tmp2 = __SMLAD(k, 0x08F7F755, tmp2);
+
+    *(h1++) = d;
+    *(h2++) = g;
+    *(h3++) = l;
+    *(h4++) = tmp1;
+    *(h5++) = tmp2;
+
+    /* b += g; // h: 4, h1: 8, h2: 4, h3: 4, h4: 4, h5: 4, h6: 4
     k = g - k; // h: 4, h1: 8, h2: 4, h3: 4, h4: 4, h5: 8, h6: 4
 
     e = (d - e); // h: 4, h1: 8, h2: 4, h3: 8, h4: 4, h5: 8, h6: 4
@@ -198,18 +316,53 @@ void Toom4_mult(int16_t *h, int16_t *c, int16_t *f) {
     h1[i] = barrett_32(b);
     h2[i] = barrett_32(d);
     h4[i] = barrett_32(g);
-    h5[i] = barrett_32(k);
+    h5[i] = barrett_32(k); */
   }
-  h2 -= 192; h4 -= 192; h6 -= 192;
+
+  h1 -= 383; h3 -= 383; h5 -= 383;
+  h2 -= 575; h4 -= 575; h6 -= 575;
   for (i = 0; i < 382; i += 2){
-    (*(uint32_t *)(h2 + i)) = __SADD16(*(uint32_t *)(h1 + i), *(uint32_t *)(h2 + i));
-    // To use SIMD in mod P(x)
-    // (*(uint32_t *)(h4 + i)) = barrett_16x2(__SADD16(*(uint32_t *)(h3 + i), *(uint32_t *)(h4 + i)));
-    (*(uint32_t *)(h4 + i)) = __SADD16(*(uint32_t *)(h3 + i), *(uint32_t *)(h4 + i));
-    (*(uint32_t *)(h6 + i)) = __SADD16(*(uint32_t *)(h5 + i), *(uint32_t *)(h6 + i));
+    a = *(h1++);
+    l = *(h1++);
+    b = *h2;
+    tmp1 = *(h2 + 1);
+
+    d = *(h3++);
+    tmp2 = *(h3++);
+    e = *h4;
+    tmp3 = *(h4 + 1);
+
+    g = *(h5++);
+    tmp4 = *(h5++);
+    k = *h6;
+    tmp5 = *(h6 + 1);
+
+    b = a + b;
+    tmp1 = l + tmp1;
+    e = d + e;
+    tmp3 = tmp2 + tmp3;
+    k = g + k;
+    tmp5 = tmp4 + tmp5;
+
+    *(h2++) = b;
+    *(h2++) = tmp1;
+    *(h4++) = e;
+    *(h4++) = tmp3;
+    *(h6++) = k;
+    *(h6++) = tmp5;
   }
-  h2[382] += h1[382];
-  // h4[382] = barrett_16x2(h4[382] + h3[382]);
-  h4[382] = h4[382] + h3[382];
-  h6[382] += h5[382];
+    a = *(h1++);
+    b = *h2;
+    d = *(h3++);
+    e = *h4;
+    g = *(h5++);
+    k = *h6;
+
+    b = a + b;
+    e = d + e;
+    k = g + k;
+
+    *(h2++) = b;
+    *(h4++) = e;
+    *(h6++) = k;
 }

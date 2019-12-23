@@ -3,6 +3,6 @@
 
 #include "Karatsuba.h"
 void Toom3_mult(int16_t *, int16_t *, int16_t *);
-void Toom4_mult(int16_t *, int16_t *, int16_t *);
+void Toom4_mult(int32_t *, uint32_t *, uint32_t *);
 
 #endif

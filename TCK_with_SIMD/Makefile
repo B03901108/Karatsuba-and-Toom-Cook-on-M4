@@ -1,10 +1,12 @@
 PROJECT = awesomesauce
 BUILD_DIR = bin
+#ARCH_FLAGS = "-mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16"
 
 SHARED_DIR = ../my-common-code
 CFILES = my-project.c
 CFILES += Karatsuba.c Toom.c schoolbook.c
 CFILES += my_stm32fIO.c
+CFILES += polymul_NxN_sch2p19_i.c
 #AFILES += schoolbook_original.S
 
 # TODO - you will need to edit these two lines!
