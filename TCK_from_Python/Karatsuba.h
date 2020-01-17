@@ -2,7 +2,6 @@
 #define Karatsuba_h
 
 #include <stdint.h>
-#include "cmsis.h"
 
 uint32_t* extend_input_coefs_c(uint32_t *);
 uint32_t* extend_input_coefs_f(uint32_t *);

@@ -246,7 +246,8 @@ def copy_output_coefs():
 
 
 def print_prologue():
-	print('#include \"Karatsuba.h\"\n')
+	print('#include \"Karatsuba.h\"')
+	print('#include \"cmsis.h\"\n')
 
 
 def print_Karatsuba():

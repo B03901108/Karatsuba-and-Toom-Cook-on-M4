@@ -9,8 +9,8 @@ qR2inv = 935519
 _2P15 = (1 << 15)
 
 def print_prologue():
-	print('#include \"Toom.h\"\n')
-
+	print('#include \"Toom.h\"')
+	print('#include \"cmsis.h\"\n')
 
 def print_barrett_16x2(reg1, reg2, reg3):
 	print('  r%d = __SMLAWB(ir_qR2inv, r%d, ir_2P15);' % (reg2, reg1))
