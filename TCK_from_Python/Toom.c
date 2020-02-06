@@ -1,6 +1,8 @@
 #include "Toom.h"
 #include "cmsis.h"
 
+extern void Karatsuba_mult_asm(int32_t *, uint32_t *, uint32_t*);
+
 // specialized for 768x768
 void Toom4_mult(int32_t *h, uint32_t *c, uint32_t *f) {
   int i;
@@ -156,13 +158,13 @@ void Toom4_mult(int32_t *h, uint32_t *c, uint32_t *f) {
     *(arrOut++) = r0;
   }
 
-  Karatsuba_mult(h, c, f);
-  Karatsuba_mult(h_tmp, c_eval + 384, f_eval + 384);
-  Karatsuba_mult(h + 384, c_eval, f_eval);
-  Karatsuba_mult(h_tmp + 384, c_eval + 96,  f_eval + 96);
-  Karatsuba_mult(h + 768, c_eval + 192,  f_eval + 192);
-  Karatsuba_mult(h_tmp + 768, c_eval + 288,  f_eval + 288);
-  Karatsuba_mult(h + 1152, c + 288, f + 288);
+  Karatsuba_mult_asm(h, c, f);
+  Karatsuba_mult_asm(h_tmp, c_eval + 384, f_eval + 384);
+  Karatsuba_mult_asm(h + 384, c_eval, f_eval);
+  Karatsuba_mult_asm(h_tmp + 384, c_eval + 96,  f_eval + 96);
+  Karatsuba_mult_asm(h + 768, c_eval + 192,  f_eval + 192);
+  Karatsuba_mult_asm(h_tmp + 768, c_eval + 288,  f_eval + 288);
+  Karatsuba_mult_asm(h + 1152, c + 288, f + 288);
 
   h0 = h; h1 = h_tmp;
   for (i = 0; i < 383; ++i){

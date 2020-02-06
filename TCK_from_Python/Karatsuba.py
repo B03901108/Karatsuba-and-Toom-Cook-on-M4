@@ -248,6 +248,7 @@ def copy_output_coefs():
 def print_prologue():
 	print('#include \"Karatsuba.h\"')
 	print('#include \"cmsis.h\"\n')
+	print('extern void hybrid_mult_asm(int32_t *, uint32_t *, uint32_t *);\n')
 
 
 def print_Karatsuba():
@@ -262,7 +263,8 @@ def print_Karatsuba():
 	print('  c_to = extend_input_coefs_c(c_to);')
 	print('  f_to = extend_input_coefs_f(f_to);')
 	#hybrid_mult()
-	print('  hybrid_mult(h_ext, c_to - %d, f_to - %d);' % (input_size, input_size))
+	#print('  hybrid_mult(h_ext, c_to - %d, f_to - %d);' % (input_size, input_size))
+	print('  hybrid_mult_asm(h_ext, c_to - %d, f_to - %d);' % (input_size, input_size))
 	#compose_output_coefs()
 	print('  compose_output_coefs(h_ext);')
 	copy_output_coefs();

@@ -6,6 +6,7 @@ CFILES = my-project.c
 CFILES += Karatsuba.c Toom.c
 CFILES += my_stm32fIO.c
 CFILES += polymul_NxN_sch2p19_i.c
+AFILES = schoolbook.S Karatsuba_asm.S
 
 # TODO - you will need to edit these two lines!
 DEVICE=stm32f407vgt6
