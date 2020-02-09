@@ -13,11 +13,14 @@ _2P15 = (1 << 15)
 try: NN = int(sys.argv[1])
 except: NN = 192
 try: B = int(sys.argv[2])
-except:
-	B = 48
+except: B = 48
+try: output_mode = sys.argv[3]
+except: output_mode = 'nt'
 #assert(768 % NN == 0)
 assert(log2(NN / B).is_integer())
 assert(B % 4 == 0)
+assert((output_mode == 'nt') or (output_mode == 't'))
+assert((NN > B) or (output_mode != 't'))
 LVL = int(log2(NN // B))
 
 
@@ -45,7 +48,8 @@ def print_Karatsuba():
 	print('.global Karatsuba_mult_asm')
 	print('.type Karatsuba_mult_asm, %function')
 	print('@ %dx%d %d-layer Karatsuba' % (NN, NN, LVL))
-	print('@ void Karatsuba_mult_asm(int32_t *h, uint32_t *c, uint32_t *f)')
+	output_type = 'uint32_t *' if output_mode == 't'else 'int32_t *'
+	print('@ void Karatsuba_mult_asm(%sh, uint32_t *c, uint32_t *f)' % (output_type))
 	print('Karatsuba_mult_asm:')
 	print('  push.w {r4-r12, lr}')
 	if LVL:
@@ -309,14 +313,27 @@ def compose_output_coefs():
 
 def copy_output_coefs():
 	input_size = NN * pow(1.5, LVL) // 2 * 4
-	tmp_reg = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10', 'r11', 'r12']
+	tmp_reg = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']
 	print('  sub.w r0, r0, #%d' % (NN * 6))
 	print('  vmov.w lr, s0')
-	MAX_MOVE = len(tmp_reg)
+	if output_mode == 't':
+		print('  movw.w r12, #18015')
+		print('  movt.w r12, #14')
+		print('  movw.w r11, #4591')
+	tmp_reg += [] if output_mode == 't' else ['r10', 'r11', 'r12']
+	MAX_MOVE = (len(tmp_reg) // 2 * 2) if output_mode == 't' else len(tmp_reg)
 	for it in range(0, NN * 2, MAX_MOVE):
 		MOVE = min(MAX_MOVE, (NN * 2 - it))
 		for rid in range(MOVE):
 			print('  ldr.w %s, [r0], #4' % (tmp_reg[rid]))
+		if output_mode == 't':
+			for rid in range(0, MOVE, 2):
+				print('  smmulr.w r10, r12, %s' % (tmp_reg[rid]))
+				print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid], tmp_reg[rid]))
+				print('  smmulr.w r10, r12, %s' % (tmp_reg[rid + 1]))
+				print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid + 1], tmp_reg[rid + 1]))
+				print('  pkhbt.w %s, %s, %s, lsl #16' % (tmp_reg[rid // 2], tmp_reg[rid], tmp_reg[rid + 1]))
+			MOVE //= 2
 		for rid in range(MOVE):
 			print('  str.w %s, [lr], #4' % (tmp_reg[rid]))
 
