@@ -322,7 +322,11 @@ def copy_output_coefs():
 	MAX_MOVE = (len(tmp_reg) // 2 * 2) if output_mode == 't' else len(tmp_reg)
 	step_total = NN * 2
 	step_tail = step_total % MAX_MOVE
-	print('  add.w r1, r0, #%d' % ((step_total - step_tail) * 4))
+	offset = (step_total - step_tail) * 4
+	if offset < 4096 or is_constant(offset): print('  add.w r1, r0, #%d' % (offset))
+	else:
+		print('  add.w r1, r0, #%d' % (offset % 1024))
+		print('  add.w r1, r1, #%d' % (offset // 1024 * 1024))
 	print('copy_output_body:')
 	print('  ldm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE - 1]))
 	if output_mode == 't':
