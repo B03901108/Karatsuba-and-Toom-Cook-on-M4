@@ -5,7 +5,7 @@ SHARED_DIR = ../my-common-code
 CFILES = my-project.c
 CFILES += Karatsuba.c Toom.c
 CFILES += my_stm32fIO.c
-AFILES = schoolbook.S Karatsuba_asm.S
+AFILES = schoolbook.S Karatsuba_asm.S T4_64x64.S Toom_asm.S
 AFILES += polymul_8x8_sch.S polymul_16x16_sch.S polymul_32x32_sch.S polymul_64x64_sch.S
 AFILES += polymul_128x128_bar_B64.S polymul_256x256_bar_B64.S polymul_768x768_bar_B48.S
 

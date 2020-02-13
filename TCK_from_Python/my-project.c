@@ -13,6 +13,7 @@ extern void gf_polymul_256x256 (int32_t *h, int32_t *f, int32_t *g);
 extern void gf_polymul_768x768 (int32_t *h, int32_t *f, int32_t *g);
 extern void hybrid_mult_asm(int32_t *cf, uint32_t *c_from1, uint32_t *f_from1);
 extern void Karatsuba_mult_asm(uint32_t *, uint32_t *, uint32_t*);
+extern void Toom4_mult_asm(uint32_t *, uint32_t *, uint32_t *);
 
 static void clock_setup(void)
 {
@@ -138,7 +139,7 @@ int main(void) {
 	int16_t *reader_i16;
 	uint32_t *reduction_ptr_16x2;
 	int16_t c[768], f[768], h1[1536], h2[1536], h3[1536];
-	int32_t h32[1536], h32_ref[1536];
+	int32_t h32[1536];
 
 	console_puts("\nStart of Testing\r\n\n");
 
@@ -146,15 +147,15 @@ int main(void) {
 	srand(31415926); // 31415926 // 53589793 // 23846264
 	// for (i = 0; i < 761; ++i) { c[i] = (rand() % 1531) * 3 - 2295; f[i] = (rand() % 3) - 1; }
 	// for (; i < 768; ++i) c[i] = f[i] = 0;
-	for (counter = 0; counter < 100000; ++counter) {
+	for (counter = 0; counter < 100; ++counter) {
 		for (i = 0; i < 761; ++i) { c[i] = (rand() % 1531) * 3 - 2295; f[i] = (rand() % 3) - 1; }
 		for (; i < 768; ++i) c[i] = f[i] = 0;
 		for (i = 0; i < 1536; ++i) h1[i] = h2[i] = h3[i] = h32[i] = 0;
 
 		t0 = hal_get_time();
 		// Karatsuba_mult(h32_ref, (uint32_t *)c, (uint32_t *)f);
-		// mock_mult(h3, c, f, 768);
-		gf_polymul_768x768((int32_t *)h3, (int32_t *)c, (int32_t *)f);
+		mock_mult(h3, c, f, 256);
+		// gf_polymul_768x768((int32_t *)h3, (int32_t *)c, (int32_t *)f);
 		// gf_polymul_256x256((int32_t *)h3, (int32_t *)c, (int32_t *)f);
 		/* y = h3[761];
 		a = h3[0] + y;
@@ -172,7 +173,8 @@ int main(void) {
 		console_puts(" clock cycles (mock_mult)\r\n");
 
 		t0 = hal_get_time();
-		// Toom4_mult(h32, (uint32_t *)c, (uint32_t *)f);
+		// Toom4_mult_asm((uint32_t *)h32, (uint32_t *)c, (uint32_t *)f);
+		// Toom4_mult((int32_t *)h32, (uint32_t *)c, (uint32_t *)f);
 		// Karatsuba_mult(h32, (uint32_t *)c, (uint32_t *)f);
 		Karatsuba_mult_asm((uint32_t *)h32, (uint32_t *)c, (uint32_t *)f);
 		t1 = hal_get_time();
@@ -190,7 +192,7 @@ int main(void) {
 			*(reduction_ptr_16x2) = barrett_16x2(z);
 		} */
 		console_putint(t1 - t0);
-		console_puts(" clock cycles (Karatsuba_mult_asm)\r\n");
+		console_puts(" clock cycles (Toom4_mult_asm)\r\n");
 
 		/* for (i = 0; i < 384; ++i) if (h32_ref[i] != h32[i]) {
 			console_puts("h1 vs. h2 -- ");
@@ -238,8 +240,8 @@ int main(void) {
 			console_puts(" cycles\r\n");
 		} */
 		reader_i16 = (int16_t *)h32;
-		for (i = 0; i < 32; ++i) if ((reader_i16[i] - h3[i])) {
-		// for (i = 0; i < 192; ++i) if ((h32[i] - h3[i]) % 4591) {
+		for (i = 0; i < 512; ++i) if ((reader_i16[i] - h3[i]) % 4591) {
+		// for (i = 0; i < 1536; ++i) if ((h32[i] - h3[i]) % 4591) {
 			console_puts("h32-h3 round ");
 			console_putint(counter);
 			console_puts(", ");

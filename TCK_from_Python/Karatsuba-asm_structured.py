@@ -22,7 +22,7 @@ except: ftn_name = 'Karatsuba_mult_asm'
 assert(log2(NN / B).is_integer())
 assert(B % 8 == 0)
 assert((output_mode == 'nt') or (output_mode == 't'))
-assert((NN > B) or (output_mode != 't'))
+#assert((NN > B) or (output_mode != 't'))
 LVL = int(log2(NN // B))
 
 
@@ -35,6 +35,14 @@ def is_constant(intIn):
 		if (bin_str[8 : 16] == '0' * 8): return True
 		if (bin_str[0 : 8] == bin_str[8 : 16]): return True
 	return False
+
+
+def barrett_32x2(regInL, regInH, reg_tmp, reg_qR2inv, reg_q, regOut):
+	print('  smmulr.w %s, %s, %s' % (reg_tmp, reg_qR2inv, regInL))
+	print('  mls.w %s, %s, %s, %s' % (regInL, reg_q, reg_tmp, regInL))
+	print('  smmulr.w %s, %s, %s' % (reg_tmp, reg_qR2inv, regInH))
+	print('  mls.w %s, %s, %s, %s' % (regInH, reg_q, reg_tmp, regInH))
+	print('  pkhbt.w %s, %s, %s, lsl #16' % (regOut, regInL, regInH))
 
 
 def print_prologue():
@@ -51,7 +59,7 @@ def print_Karatsuba():
 	print('.type %s,' % (ftn_name), end=' ')
 	print('%function')
 	print('@ %dx%d %d-layer Karatsuba' % (NN, NN, LVL))
-	output_type = 'uint32_t *' if output_mode == 't'else 'int32_t *'
+	output_type = 'uint32_t *' if output_mode == 't' else 'int32_t *'
 	print('@ void %s(%sh, uint32_t *c, uint32_t *f)' % (ftn_name, output_type))
 	print('%s:' % (ftn_name))
 	print('  push.w {r4-r12, lr}')
@@ -93,13 +101,14 @@ def copy_input_coefs(arr_name):
 	else:
 		step_tail = step_total % len(tmp_reg)
 		print('  add.w lr, r0, #%d' % ((step_total - step_tail) * 4))
-		print('copy_input_%s_body:' % (arr_name))
+		print('%s_copy_input_%s_body:' % (ftn_name, arr_name))
 		print('  ldm.w %s!, {%s-%s}' % (source_addr, tmp_reg[0], tmp_reg[-1]))
 		print('  stm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[-1]))
 		print('  cmp.w r0, lr')
-		print('  bne.w copy_input_%s_body' % (arr_name))
-	print('  ldm.w %s!, {%s-%s}' % (source_addr, tmp_reg[0], tmp_reg[step_tail - 1]))
-	print('  stm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
+		print('  bne.w %s_copy_input_%s_body' % (ftn_name, arr_name))
+	if step_tail:
+		print('  ldm.w %s!, {%s-%s}' % (source_addr, tmp_reg[0], tmp_reg[step_tail - 1]))
+		print('  stm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
 
 
 def extend_input_coefs(arr_name):
@@ -119,9 +128,9 @@ def extend_input_coefs(arr_name):
 		else:
 			print('  sub.w r12, r0, #%d' % (offset % 4096))
 			print('  sub.w r12, r12, #%d' % (offset // 4096 * 4096))
-		print('extend_input_%s_%d_body:' % (arr_name, lvl_id))
+		print('%s_extend_input_%s_%d_body:' % (ftn_name, arr_name, lvl_id))
 		print('  add.w lr, r12, #%d' % (count_bndry * 4))
-		print('extend_input_%s_%d_unit:' % (arr_name, lvl_id))
+		print('%s_extend_input_%s_%d_unit:' % (ftn_name, arr_name, lvl_id))
 		print('  ldm.w r12!, {%s-%s}' % (tmp_reg[0], tmp_reg[MOVE - 1]))
 		for rid in range(MOVE): print('  ldr.w %s, [r12, #%d]' % (tmp_reg[rid + MOVE], (count_bndry - MOVE + rid) * 4))
 		for rid in range(MOVE): print('  sadd16.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[rid + MOVE]))
@@ -135,11 +144,11 @@ def extend_input_coefs(arr_name):
 				print('  ssub16.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[MOVE]))
 		print('  stm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[MOVE - 1]))
 		print('  cmp.w r12, lr')
-		print('  bne.w extend_input_%s_%d_unit' % (arr_name, lvl_id))
+		print('  bne.w %s_extend_input_%s_%d_unit' % (ftn_name, arr_name, lvl_id))
 		print('  add.w r12, r12, #%d' % (count_bndry * 4))
 		print('  vmov.w lr, s1')
 		print('  cmp.w r12, lr')
-		print('  bne.w extend_input_%s_%d_body' % (arr_name, lvl_id))
+		print('  bne.w %s_extend_input_%s_%d_body' % (ftn_name, arr_name, lvl_id))
 		ext_bndry += (ext_bndry // 2)
 		count_bndry //= 2
 
@@ -162,7 +171,11 @@ def hybrid_mult():
 			print('  sub.w r2, r1, #%d' % (input_size % 2048))
 			print('  sub.w r2, r2, #%d' % (input_size // 2048 * 2048))
 		print('  vmov.w s1, r7')
-		print('snake_body:')
+		print('%s_snake_body:' % (ftn_name))
+	elif output_mode == 't':
+		print('  movw.w r3, #18015')
+		print('  movt.w r3, #14')
+		print('  vmov.w s2, r3')
 	print('  ldr.w r3, [r1], #4')
 	print('  ldr.w r4, [r1], #4')
 	for product_idx in range(B // 2 - 1):
@@ -216,16 +229,41 @@ def hybrid_mult():
 			print('  pkhbt.w r3, r4, r3')
 			print('  smlad.w %s, r3, r5, %s' % (str_reg[2], str_reg[2]))
 			print('  smlad.w %s, r3, r6, %s' % (str_reg[4], str_reg[4]))
-		if (product_idx == B // 2 - 2): print('  movw.w r3, #0')
+
+		if LVL == 0 and output_mode == 't':
+			if ((product_idx < B // 4 - 1) and (product_idx % 2)) or ((product_idx >= B // 4 - 1) and (1 - product_idx % 2)):
+				print('  vmov.w r6, s2')
+				print('  movw.w r5, #4591')
+				for rid in range(0, 4, 2): barrett_32x2(str_reg[rid], str_reg[rid + 1], 'r3', 'r6', 'r5', str_reg[rid // 2])
+				if (product_idx == B // 2 - 2):
+					barrett_32x2(str_reg[4], str_reg[5], 'r3', 'r6', 'r5', str_reg[2])
+					print('  smmulr.w r3, r6, %s' % (str_reg[6]))
+					print('  mls.w %s, r5, r3, %s' % (str_reg[3], str_reg[6]))
+					print('  ubfx.w %s, %s, #0, #16' % (str_reg[3], str_reg[3]))
+			else:
+				print('  vmov.w s3, r5')
+				print('  vmov.w r4, s2')
+				print('  movw.w r3, #4591')
+				for rid in range(0, 4, 2): barrett_32x2(str_reg[rid], str_reg[rid + 1], 'r5', 'r4', 'r3', str_reg[rid // 2])
+				print('  vmov.w r5, s3')
+		if (product_idx == B // 2 - 2):
+			if LVL > 0 or output_mode == 'nt': print('  movw.w r3, #0')
 		elif (product_idx < (B // 4 - 1)) and (product_idx % 2): print('  ldr.w r3, [r1, #-8]')
 		elif (product_idx >= (B // 4 - 1)) and (1 - product_idx % 2): print('  ldr.w r3, [r1, #4]')
-		for reg in str_reg[ : 4]: print('  str.w %s, [r0], #4' % (reg))
-	for reg in str_reg[4 : ]: print('  str.w %s, [r0], #4' % (reg))
-	print('  str.w r3, [r0], #4')
+
+		if LVL == 0 and output_mode == 't':
+			for reg in str_reg[ : 2]: print('  str.w %s, [r0], #4' % (reg))
+		else:
+			for reg in str_reg[ : 4]: print('  str.w %s, [r0], #4' % (reg))
+	if LVL == 0 and output_mode == 't':
+		for reg in str_reg[2 : 4]: print('  str.w %s, [r0], #4' % (reg))
+	else:
+		for reg in str_reg[4 : ]: print('  str.w %s, [r0], #4' % (reg))
+		print('  str.w r3, [r0], #4')
 	if LVL:
 		print('  vmov.w r7, s1')
 		print('  cmp.w r0, r7')
-		print('  bne.w snake_body')
+		print('  bne.w %s_snake_body' % (ftn_name))
 
 #to_be_optimized: tmp_reg always r1-r12 by using the trick in copy_input
 def compose_output_coefs():
@@ -250,41 +288,41 @@ def compose_output_coefs():
 			print('  add.w lr, r0, #%d' % (offset % 4096))
 			print('  add.w lr, lr, #%d' % (offset // 4096 * 4096))
 		print('  vmov.w s1, lr')
-		print('compose_output_%d_body:' % (fold))
+		print('%s_compose_output_%d_body:' % (ftn_name, fold))
 		#op_tmp = op_accum + unit_size
 		print('  add.w lr, r0, #%d' % (unit_size))
-		print('compose_output_A_%d:' % (fold))
+		print('%s_compose_output_A_%d:' % (ftn_name, fold))
 		print('  ldm.w r0, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE - 1]))
 		for rid in range(MAX_MOVE): print('  ldr.w %s, [r0, #%d]' % (tmp_reg[rid + MAX_MOVE], unit_size + rid * 4))
 		for rid in range(MAX_MOVE): print('  sub.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid + MAX_MOVE], tmp_reg[rid]))
 		print('  stm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE - 1]))
 		print('  cmp.w r0, lr')
-		print('  bne.w compose_output_A_%d' % (fold))
+		print('  bne.w %s_compose_output_A_%d' % (ftn_name, fold))
 		#op_tmp2 = op_accum - unit_size
 		print('  sub.w lr, lr, #%d' % (unit_size))
-		print('compose_output_B_%d:' % (fold))
+		print('%s_compose_output_B_%d:' % (ftn_name, fold))
 		for rid in range(MAX_MOVE):
 			print('  ldr.w %s, [r0, #-4]!' % (tmp_reg[rid + MAX_MOVE]))
 			print('  ldr.w %s, [r0, #%d]' % (tmp_reg[rid], unit_size * 2))
 		for rid in range(MAX_MOVE): print('  sub.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[rid + MAX_MOVE]))
 		for rid in range(MAX_MOVE): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], unit_size + 4 * (MAX_MOVE - rid - 1)))
 		print('  cmp.w r0, lr')
-		print('  bne.w compose_output_B_%d' % (fold))
+		print('  bne.w %s_compose_output_B_%d' % (ftn_name, fold))
 		#op_accum = op_tmp2 - unit_size
 		#op_tmp = op_accum - unit_size
 		print('  sub.w lr, lr, #%d' % (unit_size))
-		print('compose_output_C_%d:' % (fold))
+		print('%s_compose_output_C_%d:' % (ftn_name, fold))
 		for rid in range(MAX_MOVE):
 			print('  ldr.w %s, [r0, #-4]!' % (tmp_reg[rid + MAX_MOVE]))
 			print('  ldr.w %s, [r0, #%d]' % (tmp_reg[rid], unit_size))
 		for rid in range(MAX_MOVE): print('  add.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[rid + MAX_MOVE]))
 		for rid in range(MAX_MOVE): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], unit_size + 4 * (MAX_MOVE - rid - 1)))
 		print('  cmp.w r0, lr')
-		print('  bne.w compose_output_C_%d' % (fold))
+		print('  bne.w %s_compose_output_C_%d' % (ftn_name, fold))
 		print('  add.w r0, r0, #%d' % (unit_size * 5))
 		print('  vmov.w lr, s1')
 		print('  cmp.w r0, lr')
-		print('  bne.w compose_output_%d_body' % (fold))
+		print('  bne.w %s_compose_output_%d_body' % (ftn_name, fold))
 				
 		#cSfS = h_ext + unit_num * unit_size * 4
 		print('  sub.w lr, r0, #%d' % (unit_size))
@@ -294,18 +332,18 @@ def compose_output_coefs():
 			print('  sub.w r12, r0, #%d' % (offset % 4096))
 			print('  sub.w r12, r12, #%d' % (offset // 4096 * 4096))
 		MAX_MOVE = len(tmp_jump_reg) // 2
-		print('compose_output_%d_jump:' % (fold))
+		print('%s_compose_output_%d_jump:' % (ftn_name, fold))
 		print('  add.w r11, r12, #%d' % (unit_size * 2))
-		print('compose_output_D_%d:' % (fold))
+		print('%s_compose_output_D_%d:' % (ftn_name, fold))
 		print('  ldm.w r12, {%s-%s}' % (tmp_jump_reg[0], tmp_jump_reg[MAX_MOVE - 1]))
 		print('  ldm.w lr!, {%s-%s}' % (tmp_jump_reg[MAX_MOVE], tmp_jump_reg[-1]))
 		for rid in range(MAX_MOVE): print('  sub.w %s, %s, %s' % (tmp_jump_reg[rid], tmp_jump_reg[rid + MAX_MOVE], tmp_jump_reg[rid]))
 		print('  stm.w r12!, {%s-%s}' % (tmp_jump_reg[0], tmp_jump_reg[MAX_MOVE - 1]))
 		print('  cmp.w r12, r11')
-		print('  bne.w compose_output_D_%d' % (fold))
+		print('  bne.w %s_compose_output_D_%d' % (ftn_name, fold))
 		print('  add.w r12, r12, #%d' % (unit_size * 2))
 		print('  cmp.w r12, r0')
-		print('  bne.w compose_output_%d_jump' % (fold))
+		print('  bne.w %s_compose_output_%d_jump' % (ftn_name, fold))
 		if fold == (LVL - 1): print('  sub.w r0, r12, #%d' % (unit_size * 2 + NN * 6))
 		else: print('  sub.w r0, r12, #%d' % (unit_size * 2))
 
@@ -327,29 +365,22 @@ def copy_output_coefs():
 	else:
 		print('  add.w r1, r0, #%d' % (offset % 1024))
 		print('  add.w r1, r1, #%d' % (offset // 1024 * 1024))
-	print('copy_output_body:')
+	print('%s_copy_output_body:' % (ftn_name))
 	print('  ldm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE - 1]))
 	if output_mode == 't':
 		for rid in range(0, MAX_MOVE, 2):
-			print('  smmulr.w r10, r12, %s' % (tmp_reg[rid]))
-			print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid], tmp_reg[rid]))
-			print('  smmulr.w r10, r12, %s' % (tmp_reg[rid + 1]))
-			print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid + 1], tmp_reg[rid + 1]))
-			print('  pkhbt.w %s, %s, %s, lsl #16' % (tmp_reg[rid // 2], tmp_reg[rid], tmp_reg[rid + 1]))
+			barrett_32x2(tmp_reg[rid], tmp_reg[rid + 1], 'r10', 'r12', 'r11', tmp_reg[rid // 2])
 	if output_mode == 't': print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE // 2 - 1]))
 	else: print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[MAX_MOVE - 1]))
 	print('  cmp.w r0, r1')
-	print('  bne.w copy_output_body')
-	print('  ldm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
-	if output_mode == 't':
-		for rid in range(0, step_tail, 2):
-			print('  smmulr.w r10, r12, %s' % (tmp_reg[rid]))
-			print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid], tmp_reg[rid]))
-			print('  smmulr.w r10, r12, %s' % (tmp_reg[rid + 1]))
-			print('  mls.w %s, r11, r10, %s' % (tmp_reg[rid + 1], tmp_reg[rid + 1]))
-			print('  pkhbt.w %s, %s, %s, lsl #16' % (tmp_reg[rid // 2], tmp_reg[rid], tmp_reg[rid + 1]))
-	if output_mode == 't': print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail // 2 - 1]))
-	else: print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
+	print('  bne.w %s_copy_output_body' % (ftn_name))
+	if step_tail:
+		print('  ldm.w r0!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
+		if output_mode == 't':
+			for rid in range(0, step_tail, 2):
+				barrett_32x2(tmp_reg[rid], tmp_reg[rid + 1], 'r10', 'r12', 'r11', tmp_reg[rid // 2])
+		if output_mode == 't': print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail // 2 - 1]))
+		else: print('  stm.w lr!, {%s-%s}' % (tmp_reg[0], tmp_reg[step_tail - 1]))
 
 
 print_prologue()
