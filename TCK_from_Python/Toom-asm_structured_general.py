@@ -2,6 +2,7 @@
 import sys
 import re
 import numpy
+from Toom4_Matrix import Toom4Table
 
 q = 4591
 qinv = 15631
@@ -70,6 +71,7 @@ def print_Toom4():
 	print('@ void %s(%sh, uint32_t *c, uint32_t *f)' % (ftn_name_T4, output_type))
 	print('%s:' % (ftn_name_T4))
 	print('  push.w {r4-r12, lr}')
+	print('  vpush.w { s16 }')
 	print('  sub.w sp, sp, #%d' % (NN * 5 + NN * 14))
 	print('  vmov.w s0, r0')
 	print('  mov.w r0, sp')
@@ -105,7 +107,9 @@ def print_Toom4():
 	copy_output_coefs()
 
 	print('  add.w sp, sp, #%d' % (NN * 5 + NN * 14))
+	print('  vpop.w { s16 }')
 	print('  pop.w {r4-r12, pc}')
+	Toom4Table(q)
 
 
 def eval_input_coefs(arr_name):
@@ -191,56 +195,14 @@ def eval_input_coefs(arr_name):
 	print('  add.w r0, r0, #%d' % (NN // 2 * 4))
 
 
-#to_be_optimized: the constants s6, s12
 def interpol_output_coefs_t():
 	print('  add.w lr, r0, #%d' % (NN))
 	print('  movw.w r12, #%d' % (qR2inv % (2 ** 16)))
 	print('  movt.w r12, #%d' % (qR2inv // (2 ** 16)))
 	print('  movw.w r11, #%d' % (q))
-
-	print('  movw.w r10, #0xFFFE')
-	print('  movt.w r10, #0xFA05')
-	print('  vmov.w s1, r10')
-	print('  movt.w r10, #0x08AB')
-	print('  vmov.w s3, r10')
-
-	print('  movw.w r10, #0x0878')
-	print('  movt.w r10, #0x03FC')
-	print('  vmov.w s2, r10')
-	print('  movt.w r10, #0xFE02')
-	print('  vmov.w s14, r10')
-
-	print('  movw.w r10, #0x05FB')
-	print('  movt.w r10, #0xFB83')
-	print('  vmov.w s4, r10')
-	print('  movt.w r10, #0x053B')
-	print('  vmov.w s5, r10')
-	print('  movw.w r10, #0x053B')
-	print('  movt.w r10, #0x0004')
-	print('  vmov.w s6, r10')
-
-	print('  movw.w r10, #0xF70B')
-	print('  movt.w r10, #0xF70A')
-	print('  vmov.w s7, r10')
-
-	print('  movw.w r10, #0x06F9')
-	print('  movt.w r10, #0x00FF')
-	print('  vmov.w s8, r10')
-
-	print('  movw.w r10, #0x02FD')
-	print('  movt.w r10, #0x047C')
-	print('  vmov.w s10, r10')
-	print('  movt.w r10, #0xFAC5')
-	print('  vmov.w s11, r10')
-	print('  movw.w r10, #0xFAC5')
-	print('  movt.w r10, #0xFFFB')
-	print('  vmov.w s12, r10')
-
-	print('  movw.w r10, #0x08F7')
-	print('  movt.w r10, #0x05FA')
-	print('  vmov.w s13, r10')
-	print('  movt.w r10, #0xF755')
-	print('  vmov.w s15, r10')
+	print('	 movw.w r10, :lower16:Toom4Table_%d' % q)
+	print('	 movt.w r10, :upper16:Toom4Table_%d' % q)
+	print('	 vldm	r10, {s1-s16} @ read table')
 
 	print('  add.w r1, r0, #%d' % (NN * 6))
 	print('%s_interpol_output_body:' % (ftn_name_T4))
@@ -261,7 +223,9 @@ def interpol_output_coefs_t():
 	print('  vmov.w r10, s1')
 	print('  smuad.w r8, r10, r1')
 	print('  smuad.w r9, r10, r2')
-	print('  mvn.w r10, #203')
+	#print('  mvn.w r10, #203')
+	print('  vmov.w r10, s16 @ bot = A[1][1]')
+	#
 	print('  smlabb.w r8, r10, r3, r8')
 	print('  smlabt.w r9, r10, r3, r9')
 	print('  vmov.w r10, s2')
@@ -288,15 +252,23 @@ def interpol_output_coefs_t():
 	print('  vmov.w r10, s7')
 	print('  smuad.w r8, r10, r1')
 	print('  smuad.w r9, r10, r2')
-	print('  mov.w r10, #255')
-	print('  smlabb.w r8, r10, r3, r8')
-	print('  smlabt.w r9, r10, r3, r9')
+	#print('  mov.w r10, #255')
+	#print('  smlabb.w r8, r10, r3, r8')
+	#print('  smlabt.w r9, r10, r3, r9')
+	print('  vmov.w r10, s16 @ top = A[3][1]')
+	print('  smlatb.w r8, r10, r3, r8')
+	print('  smlatt.w r9, r10, r3, r9')
+	#
 	print('  vmov.w r10, s8')
 	print('  smlad.w r8, r10, r4, r8')
 	print('  smlad.w r9, r10, r5, r9')
-	print('  movw.w r10, #0xF70B')
-	print('  smlabt.w r8, r10, r6, r8')
-	print('  smlabt.w r9, r10, r7, r9')
+	#print('  movw.w r10, #0xF70B')
+	#print('  smlabt.w r8, r10, r6, r8')
+	#print('  smlabt.w r9, r10, r7, r9')
+	print('  vmov.w r10, s9 @ top = A[3][6]')
+	print('  smlatt.w r8, r10, r6, r8')
+	print('  smlatt.w r9, r10, r7, r9')
+	#
 	barrett_32x2('r8', 'r9', 'r10', 'r12', 'r11')
 	print('  str.w r8, [r0, #%d]' % (NN * 5 - 4))
 
@@ -315,7 +287,9 @@ def interpol_output_coefs_t():
 	print('  vmov.w r10, s13')
 	print('  smuad.w r8, r10, r1')
 	print('  smuad.w r9, r10, r2')
-	print('  mvn.w r10, #50')
+	#print('  mvn.w r10, #50')
+	print('  vmov.w r10, s9 @ bot = A[5][1]')
+	#
 	print('  smlabb.w r8, r10, r3, r8')
 	print('  smlabt.w r9, r10, r3, r9')
 	print('  vmov.w r10, s14')
@@ -341,20 +315,26 @@ def copy_output_coefs():
 		tmp_reg.append('lr')
 		step_tail = step_total % len(tmp_reg)
 		if step_tail < step_total:
-			for rid in range(len(tmp_reg)): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-			for rid in range(len(tmp_reg)): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+			for rid in range(1, len(tmp_reg)): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
+			for rid in range(1, len(tmp_reg)): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
 		tmp_reg.pop()
 	else:
 		step_tail = step_total % len(tmp_reg)
 		print('  add.w lr, r0, #%d' % ((step_total - step_tail) * 4))
 		print('%s_copy_output_A:' % (ftn_name_T4))
-		for rid in range(len(tmp_reg)): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-		for rid in range(len(tmp_reg)): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, len(tmp_reg)): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
+		for rid in range(1, len(tmp_reg)): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
 		print('  cmp.w r0, lr')
 		print('  bne.w %s_copy_output_A' % (ftn_name_T4))
 	if step_tail:
-		for rid in range(step_tail): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-		for rid in range(step_tail): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, step_tail): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * step_tail))
+		for rid in range(1, step_tail): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * step_tail))
 
 	step_total = NN // 4 * 3
 	if step_total < 2 * ((len(tmp_reg) + 1) // 2):
@@ -362,53 +342,68 @@ def copy_output_coefs():
 		MAX_MOVE = len(tmp_reg) // 2
 		step_tail = step_total % MAX_MOVE
 		if step_tail < step_total:
-			for rid in range(MAX_MOVE):
-				print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE + rid], NN // 2 * 7))
-				print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
+			for rid in range(1, MAX_MOVE):
+				print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE + rid], NN // 2 * 7 + 4 * rid))
+				print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE], NN // 2 * 7))
+			print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * MAX_MOVE))
 			for rid in range(MAX_MOVE):
 				print('  sadd16.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[MAX_MOVE + rid]))
-			for rid in range(MAX_MOVE): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+			for rid in range(1, MAX_MOVE): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * MAX_MOVE))
 		tmp_reg.pop()
 	else:
 		MAX_MOVE = len(tmp_reg) // 2
 		step_tail = step_total % MAX_MOVE
 		print('  add.w lr, r0, #%d' % ((step_total - step_tail) * 4))
 		print('%s_copy_output_B:' % (ftn_name_T4))
-		for rid in range(MAX_MOVE):
-			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE + rid], NN // 2 * 7))
-			print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
+		for rid in range(1, MAX_MOVE):
+			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE + rid], NN // 2 * 7 + 4 * rid))
+			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1, #%d]' % (tmp_reg[MAX_MOVE], NN // 2 * 7))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * MAX_MOVE))
 		for rid in range(MAX_MOVE):
 			print('  sadd16.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[MAX_MOVE + rid]))
-		for rid in range(MAX_MOVE): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, MAX_MOVE): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * MAX_MOVE))
 		print('  cmp.w r0, lr')
 		print('  bne.w %s_copy_output_B' % (ftn_name_T4))
 	if step_tail:
-		for rid in range(step_tail):
-			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[step_tail + rid], NN // 2 * 7))
-			print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
+		for rid in range(1, step_tail):
+			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[step_tail + rid], NN // 2 * 7 + 4 * rid))
+			print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1, #%d]' % (tmp_reg[step_tail], NN // 2 * 7))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * step_tail))
 		for rid in range(step_tail):
 			print('  sadd16.w %s, %s, %s' % (tmp_reg[rid], tmp_reg[rid], tmp_reg[step_tail + rid]))
-		for rid in range(step_tail): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, step_tail): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * step_tail))
 
 	step_total = (NN // 2) // 4
 	if step_total < 2 * (len(tmp_reg) + 1):
 		tmp_reg.append('lr')
 		step_tail = step_total % len(tmp_reg)
 		if step_tail < step_total:
-			for rid in range(len(tmp_reg)): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-			for rid in range(len(tmp_reg)): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+			for rid in range(1, len(tmp_reg)): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
+			for rid in range(1, len(tmp_reg)): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+			print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
 		tmp_reg.pop()
 	else:
 		step_tail = step_total % len(tmp_reg)
 		print('  add.w lr, r0, #%d' % ((step_total - step_tail) * 4))
 		print('%s_copy_output_C:' % (ftn_name_T4))
-		for rid in range(len(tmp_reg)): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-		for rid in range(len(tmp_reg)): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, len(tmp_reg)): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
+		for rid in range(1, len(tmp_reg)): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * len(tmp_reg)))
 		print('  cmp.w r0, lr')
 		print('  bne.w %s_copy_output_C' % (ftn_name_T4))
 	if step_tail:
-		for rid in range(step_tail): print('  ldr.w %s, [r1], #4' % (tmp_reg[rid]))
-		for rid in range(step_tail): print('  str.w %s, [r0], #4' % (tmp_reg[rid]))
+		for rid in range(1, step_tail): print('  ldr.w %s, [r1, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  ldr.w %s, [r1], #%d' % (tmp_reg[0], 4 * step_tail))
+		for rid in range(1, step_tail): print('  str.w %s, [r0, #%d]' % (tmp_reg[rid], 4 * rid))
+		print('  str.w %s, [r0], #%d' % (tmp_reg[0], 4 * step_tail))
 
 
 print_prologue()
