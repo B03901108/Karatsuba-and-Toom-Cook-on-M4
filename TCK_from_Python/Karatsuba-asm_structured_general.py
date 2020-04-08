@@ -194,8 +194,8 @@ def hybrid_mult():
 		print('  movw.w r3, #%d' % (qR2inv % (2 ** 16)))
 		print('  movt.w r3, #%d' % (qR2inv // (2 ** 16)))
 		print('  vmov.w s2, r3')
-	print('  ldr.w r3, [r1], #4')
-	print('  ldr.w r4, [r1], #4')
+	print('  ldr.w r4, [r1, #4]')
+	print('  ldr.w r3, [r1], #8')
 	for product_idx in range(B // 2 - 1):
 		(inc_arr_name, dec_arr_name) = ('r2', 'r1') if product_idx % 2 else ('r1', 'r2')
 		ldr_reg = ['r5', 'r6', 'r4', 'r3'] if product_idx % 2 else ['r3', 'r4', 'r6', 'r5']
@@ -207,14 +207,14 @@ def hybrid_mult():
 					print('  ldr.w %s, [%s, #4]' % (ldr_reg[1], inc_arr_name))
 					print('  ldr.w %s, [%s], #-4' % (ldr_reg[0], inc_arr_name))
 				else:
-					print('  ldr.w %s, [%s], #4' % (ldr_reg[0], inc_arr_name))
-					print('  ldr.w %s, [%s], #4' % (ldr_reg[1], inc_arr_name))
+					print('  ldr.w %s, [%s, #4]' % (ldr_reg[1], inc_arr_name))
+					print('  ldr.w %s, [%s], #8' % (ldr_reg[0], inc_arr_name))
 				if op_idx == (window_size - 1):
 					print('  ldr.w %s, [%s, #-4]' % (ldr_reg[3], dec_arr_name))
 					print('  ldr.w %s, [%s], #4' % (ldr_reg[2], dec_arr_name))
 				else:
-					print('  ldr.w %s, [%s], #-4' % (ldr_reg[2], dec_arr_name))
-					print('  ldr.w %s, [%s], #-4' % (ldr_reg[3], dec_arr_name))
+					print('  ldr.w %s, [%s, #-4]' % (ldr_reg[3], dec_arr_name))
+					print('  ldr.w %s, [%s], #-8' % (ldr_reg[2], dec_arr_name))
 				print('  smlabb.w %s, r3, r5, %s' % (str_reg[0], str_reg[0]))
 				print('  smlabb.w %s, r3, r6, %s' % (str_reg[2], str_reg[2]))
 				print('  smladx.w %s, r3, r5, %s' % (str_reg[1], str_reg[1]))
@@ -228,14 +228,14 @@ def hybrid_mult():
 						print('  ldr.w %s, [%s, #4]' % (ldr_reg[2], dec_arr_name))
 						print('  ldr.w %s, [%s], #-4' % (ldr_reg[3], dec_arr_name))
 					else:
-						print('  ldr.w %s, [%s], #4' % (ldr_reg[0], inc_arr_name))
-						print('  ldr.w %s, [%s], #4' % (ldr_reg[1], inc_arr_name))
+						print('  ldr.w %s, [%s, #4]' % (ldr_reg[1], inc_arr_name))
+						print('  ldr.w %s, [%s], #8' % (ldr_reg[0], inc_arr_name))
 					print('  smlabb.w %s, r3, r5, %s' % (str_reg[0], str_reg[0]))
 					print('  smlabb.w %s, r3, r6, %s' % (str_reg[2], str_reg[2]))
 					print('  smladx.w %s, r3, r5, %s' % (str_reg[1], str_reg[1]))
 				else:
-					print('  ldr.w %s, [%s], #4' % (ldr_reg[3], dec_arr_name))
-					print('  ldr.w %s, [%s], #4' % (ldr_reg[2], dec_arr_name))
+					print('  ldr.w %s, [%s, #4]' % (ldr_reg[2], dec_arr_name))
+					print('  ldr.w %s, [%s], #8' % (ldr_reg[3], dec_arr_name))
 					print('  smulbb.w %s, r3, r5' % (str_reg[0]))
 					print('  smulbb.w %s, r3, r6' % (str_reg[2]))
 					print('  smuadx.w %s, r3, r5' % (str_reg[1]))
@@ -276,14 +276,21 @@ def hybrid_mult():
 		elif (product_idx >= (B // 4 - 1)) and (1 - product_idx % 2): print('  ldr.w r3, [r1, #4]')
 
 		if LVL == 0 and output_mode == 't':
-			for reg in str_reg[ : 2]: print('  str.w %s, [r0], #4' % (reg))
+			print('  str.w %s, [r0, #4]' % (str_reg[1]))
+			print('  str.w %s, [r0], #8' % (str_reg[0]))
 		else:
-			for reg in str_reg[ : 4]: print('  str.w %s, [r0], #4' % (reg))
+			print('  str.w %s, [r0, #4]' % (str_reg[1]))
+			print('  str.w %s, [r0, #8]' % (str_reg[2]))
+			print('  str.w %s, [r0, #12]' % (str_reg[3]))
+			print('  str.w %s, [r0], #16' % (str_reg[0]))
 	if LVL == 0 and output_mode == 't':
-		for reg in str_reg[2 : 4]: print('  str.w %s, [r0], #4' % (reg))
+		print('  str.w %s, [r0, #4]' % (str_reg[3]))
+		print('  str.w %s, [r0], #8' % (str_reg[2]))
 	else:
-		for reg in str_reg[4 : ]: print('  str.w %s, [r0], #4' % (reg))
-		print('  str.w r3, [r0], #4')
+		print('  str.w %s, [r0, #4]' % (str_reg[5]))
+		print('  str.w %s, [r0, #8]' % (str_reg[6]))
+		print('  str.w r3, [r0, #12]')
+		print('  str.w %s, [r0], #16' % (str_reg[4]))
 	if LVL:
 		print('  vmov.w r7, s1')
 		print('  cmp.w r0, r7')
